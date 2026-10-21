@@ -1,3 +1,92 @@
+# Milestone 1 handoff — 2026-10-22 (Asia/Karachi)
+
+## Current milestone
+
+**Milestone 1 — Database Foundation: implemented and verified. STOPPED.**
+The user explicitly authorized the next milestone. Milestone 2 has not begun.
+This section supersedes the historical Milestone 0 notes retained below.
+
+## Product, stack, and architecture
+
+One consultant, customer accounts, one consultation type, fixed 30-minute appointments,
+14-day booking window. All specification exclusions remain in force. Existing
+React/Vite and Express JavaScript workspaces, pg/raw SQL, same-origin development
+proxy, and foundation screen remain intact. Verified runtime: Node 22.14.0,
+PostgreSQL 18.1. No dependencies added and no commits or pushes made.
+
+## Implemented database foundation
+
+- `server/migrations/001_initial.sql`: users, weekly_hours, blocked_slots, bookings.
+- Lowercase trimmed unique email; customer/consultant roles; singleton consultant
+  partial index; nonempty names; Argon2id hash prefix guard.
+- ISO weekdays 1–7, one interval per day, aligned half-hour boundaries, no overnight
+  intervals; absent weekday means unavailable; 24:00 allowed as interval end.
+- TIMESTAMPTZ appointment instants with finite checks; unique blocks.
+- Restrictive customer foreign key; confirmed/canceled states with cancellation
+  timestamp consistency; customer/time index; confirmed-only unique start index.
+- Migration runner uses one checked-out client, transaction, tracking table,
+  rollback, and reliable release. Applied migrations are immutable. Run a single
+  setup process; concurrent initial migration processes are not supported.
+- Local-only consultant seed accepts name, normalized email, and an externally
+  generated encoded Argon2id hash. Repeat seed preserves the existing account.
+  No default consultant or plaintext password was created. Tests use synthetic
+  hash fixtures solely for integrity checks; hashing/login remain Milestone 2.
+- Dedicated test database setup never drops databases. Tests require an explicit
+  TEST_DATABASE_URL ending in `_test`, create fresh per-run schemas, apply migrations,
+  and clean up only those schemas. Explicit test:db fails when configuration is absent.
+
+## Actual commands and final verification
+
+- `npm run db:test:setup`: passed; created slotsure_test on existing local cluster.
+- `npm run db:migrate` twice: passed; development schema applied, repeat run unchanged.
+- `npm run test:db`: final run passed, 7 tests, 0 failures, 0 skipped, real PostgreSQL.
+  Verified fresh and repeat migrations, rollback after failed DDL, seed repeatability,
+  identity/role/singleton constraints, weekly-hour checks, duplicate block rejection,
+  finite timestamps, foreign keys, confirmed uniqueness, cancellation history, and rebooking.
+- `npm test`: passed, 2 foundation tests, 0 failures, 1 explicit database-suite skip.
+  Database tests were separately executed using test:db as recorded above.
+- `npm run db:check`: passed, real SELECT 1.
+- `npm run build`: passed, Vite production assets generated (15 modules).
+- `npm run lint` and `npm run format:check`: passed after handoff formatting.
+- `git diff --check`: passed; local environment and cluster paths remain ignored.
+
+Initial failures were investigated and corrected: sandbox loopback access denied;
+escalated connection found the local database stopped, so restarted the existing
+cluster with documented pg_ctl command. First suite expected SQLSTATE 23503 for
+RESTRICT deletion; PostgreSQL 18 returns 23001 for that path, and the assertion now
+accepts either valid restrictive-foreign-key result. Node default test discovery also
+executed helper scripts named test/setup-test; test discovery is now limited to
+`tests/*.test.js`. Final suites above passed after those corrections.
+
+## Local state and limitations
+
+Existing ignored server/.env preserved and extended with TEST_DATABASE_URL pointing
+to slotsure_test on port 55432; no connection values were printed or tracked.
+Local PostgreSQL is running. Development schema exists with no seeded account or
+weekly hours. Frontend/API server processes were not started during this milestone.
+README documents migration, seed, and test setup. See docs/DECISIONS.md for trade-offs.
+The pre-existing context.md review entry was preserved in the history below.
+
+Database constraints do not implement the booking service: customer-role checks,
+consultant-local grid, time-zone handling, booking window, hours, cross-table
+block/booking consistency, authorization, and the consultant-row lock protocol remain
+for the authorized later milestones. Do not claim overlap or concurrency correctness
+yet: confirmed start uniqueness requires later grid validation. No database triggers,
+HTTP booking/auth APIs, session tables, or frontend booking features were added.
+
+Not run: Node 24, browser verification (no UI changes), authenticated race tests,
+password hashing/verification, production deployment. No known Milestone 1 blocker.
+
+## Immediate next step
+
+Wait for authorization for **Milestone 2 — Authentication**. Add established Argon2id
+hashing, session persistence, CSRF protection, registration/login/logout, authorization,
+minimal auth interfaces, and relevant tests. Do not implement booking yet.
+
+---
+
+# Historical Milestone 0 handoff (retained)
+
 # SlotSure project handoff
 
 Last updated: 2026-10-21 (Asia/Karachi).
@@ -86,3 +175,21 @@ See `docs/DECISIONS.md` for the required decision/problem/alternatives/reasoning
 ## Immediate next step
 
 Wait for explicit authorization for **Milestone 1 — Database Foundation**. Then implement minimum schema, migrations, controlled consultant seeding, test database setup, and real PostgreSQL integrity tests. Do not implement authentication in that milestone.
+
+## Milestone 0 verification review — 2026-10-21
+
+Read the specification, agent instructions, handoff, README, decision journal, configuration, frontend, backend, database-check code, and tests. Reviewed against all Milestone 0 tasks and acceptance criteria. No incomplete Milestone 0 requirements or application defects were identified. No application code, dependencies, configuration, or database schema were changed during this review. Milestone 1 remains unstarted.
+
+Actual rerun results on the installed Node 22.14.0 / npm 10.9.2 environment:
+
+- `npm test`: passed, 2 tests, 0 failures, 0 skipped; actual HTTP health/404 responses and configuration validation.
+- `npm run lint`: passed.
+- `npm run format:check`: passed before this review entry; checked again after updating this document.
+- `npm run build`: passed with Vite 8.3.5; 15 modules transformed and frontend assets generated.
+- `npm run db:check`: passed against the existing real PostgreSQL instance, reporting successful `SELECT 1` connectivity.
+- Direct HTTP checks against the running backend: `/api/health` returned 200 and the expected status/service JSON; `/api/missing` returned 404 and the expected safe JSON error.
+- Direct HTTP check through Vite: `http://127.0.0.1:5173/api/health` returned 200 and the expected health JSON.
+- Actual browser opened the existing frontend on port 5173, rendered the React page, and displayed `API connected`. Reused running development servers rather than stopping or duplicating them.
+- Git working tree was clean at review start. Existing foundation commit: `81af9a0` (`chore: initialize SlotSure project foundation`). This review did not create that commit or make any new commits. Local environment/cluster files and dependencies remain ignored; `git ls-files server/.env .local` returned no tracked paths.
+
+No failed checks in this review. Network checks ran outside the sandbox because its loopback restrictions were established during initial implementation. Not rerun: fresh `npm ci` installation, Node 24 runtime verification, mobile browser testing, and database-cluster recreation. These verification limits do not represent missing Milestone 0 implementation. Database liveness remains deliberately separate from API liveness; future schema, authorization, and concurrency tests belong to later milestones.

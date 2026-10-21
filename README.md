@@ -6,7 +6,7 @@ SlotSure will help independent consultants and their customers replace manual sc
 
 ## Current status
 
-Milestone 0 foundation only: a React status page, Express health endpoint, PostgreSQL connectivity command, linting, formatting, and automated foundation checks. Authentication, booking, availability, cancellations, and PDF confirmations are planned, not available yet.
+Milestone 1 database foundation implemented, alongside a React status page, Express health endpoint, PostgreSQL connectivity command, linting, formatting, and automated foundation checks. Authentication, booking, availability, cancellations, and PDF confirmations are planned, not available yet.
 
 Read [PROJECT_SPEC.md](PROJECT_SPEC.md) for requirements and [context.md](context.md) for the verified handoff.
 
@@ -36,7 +36,7 @@ CREATE ROLE slotsure LOGIN PASSWORD 'YOUR_LOCAL_PASSWORD';
 CREATE DATABASE slotsure OWNER slotsure;
 ```
 
-Edit `server/.env` to set your actual `DATABASE_URL`. Percent-encode reserved characters in URI passwords. The example uses PostgreSQL port 5432; use your instance's actual port. Keep `.env` private. Do not commit credentials. There are no migrations or application tables in Milestone 0.
+Edit `server/.env` to set your actual `DATABASE_URL`. Percent-encode reserved characters in URI passwords. The example uses PostgreSQL port 5432; use your instance's actual port. Keep `.env` private. Do not commit credentials. Apply the database migrations using the Milestone 1 instructions below.
 
 ```powershell
 npm run db:check
@@ -92,10 +92,47 @@ Use `npm run format` to format authored files. `PROJECT_SPEC.md` is preserved un
 
 ## Planned database and reliability
 
-Later milestones introduce users, weekly hours, blocked slots, bookings, and a PostgreSQL session store. Confirmed bookings will use a partial unique index on start times. Schedule mutations will share a transaction-scoped consultant-row lock, with business rules rechecked after acquiring it. These protections are **not implemented** in the foundation.
+Later milestones introduce users, weekly hours, blocked slots, bookings, and a PostgreSQL session store. Confirmed bookings will use a partial unique index on start times. Schedule mutations will share a transaction-scoped consultant-row lock, with business rules rechecked after acquiring it. The partial unique index is implemented; transactional schedule services remain planned.
 
 ## Limitations
 
-No authentication, appointments, PDFs, deployment, or demo accounts exist yet. Future authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No screenshots or deployment links are available.
+No authentication, appointment APIs, PDFs, deployment, or demo accounts exist yet. Future authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No screenshots or deployment links are available.
 
 See [engineering decisions](docs/DECISIONS.md). Milestone 1 requires explicit authorization.
+
+## Milestone 1 database setup
+
+Run `npm run db:migrate` after configuring `server/.env`. SQL migrations in
+`server/migrations/` run in filename order in one transaction; `schema_migrations`
+records applied files, so repeat runs leave existing data intact. Do not edit applied
+migrations; add a new numbered SQL file. Run one migration process during setup.
+No default weekly hours or consultant credentials are installed.
+
+For controlled consultant creation, place `CONSULTANT_NAME`, `CONSULTANT_EMAIL`,
+and `CONSULTANT_PASSWORD_HASH` in ignored `server/.env`, then run `npm run db:seed`.
+The hash must be a complete encoded Argon2id hash generated with an established
+password-hashing library, using a randomly salted password chosen locally. Quote
+it with single quotes in the environment file to preserve its dollar signs. Never
+use the synthetic test hash as an account credential. The seed accepts no plaintext
+password, creates at most one consultant, and leaves an existing consultant unchanged.
+It has no HTTP endpoint. Password hashing and authentication are Milestone 2 work.
+
+Run `npm run db:test:setup` to create `slotsure_test` without dropping any database.
+This requires CREATEDB permission; alternatively ask the database administrator to
+create that database owned by the application role. Set `TEST_DATABASE_URL` in
+`server/.env` to the same local connection settings with database `slotsure_test`.
+Then run `npm run test:db`. This command fails if the variable is absent, and tests
+reject database names that do not end in `_test`. Each run migrates an empty unique
+schema and removes only that schema afterward. The development database is never
+cleared. `npm test` runs foundation tests and explicitly skips database tests unless
+TEST_DATABASE_URL is exported; run `test:db` for mandatory database verification.
+
+Schema conventions: ISO weekdays 1–7; absent weekly-hours rows mean unavailable;
+24:00 is allowed only as an interval end. Appointment duration is implicit at 30
+minutes. Instants use TIMESTAMPTZ. Customer email must be trimmed lowercase before
+insertion; a unique constraint prevents duplicates. Bookings retain canceled rows
+and use a partial unique index for confirmed start times. The customer foreign key
+prevents deleting referenced users. Future services must enforce customer role,
+consultant-local slot alignment, the booking window, working hours, and cross-table
+booking/block conflicts using the specified consultant-row locking protocol. These
+business rules are not yet implemented by the schema alone.

@@ -47,3 +47,35 @@
 **Reasoning:** A shared row-lock protocol and database uniqueness fit one consultant and fixed aligned appointment slots. Recheck rules after locking and use one checked-out client per transaction with rollback and reliable release.
 
 **Trade-off:** Schedule mutations serialize for this consultant. Real PostgreSQL race tests remain mandatory in Milestone 4. No schema or locking code is part of Milestone 0.
+
+## 2026-10-22 — Database foundation
+
+**Decision:** Use numbered SQL migrations with a tracking table and a checked-out client. Apply pending files and tracking records in one transaction. Keep applied migrations immutable and run one setup process at a time.
+
+**Problem:** Reproduce the schema on fresh databases and safely repeat setup without losing existing data.
+
+**Alternatives:** An ORM migration framework or untracked schema scripts.
+
+**Reasoning:** The four-table model is small; native PostgreSQL DDL transactions and pg provide the required behavior without another dependency. Integration tests verify fresh application, repeat application, and rollback of failed DDL.
+
+**Trade-off:** No automatic downgrade or applied-file checksum verification. Concurrent initial migration processes are not supported.
+
+**Decision:** Store normalized lowercase email, use a partial unique consultant-role index, ISO weekday primary keys, finite appointment instants, and status/cancellation consistency checks. Use a restrictive customer foreign key and index customer/time lookups. Duration remains implicit at 30 minutes.
+
+**Problem:** Invalid stored states and conflicting confirmed starts must be rejected independently of HTTP validation.
+
+**Alternatives:** Application-only validation, persisted generated slots, or triggers enforcing all future booking rules.
+
+**Reasoning:** Declarative constraints enforce stable row-level facts. The confirmed-only unique index preserves canceled history while allowing rebooking. Time-zone-dependent grid checks, customer-role checks, and cross-table schedule consistency belong in later transactional services, following the required consultant-row lock protocol.
+
+**Trade-off:** The schema alone does not yet make bookings safe or implement availability. Uniqueness prevents identical confirmed starts, but overlap prevention also depends on enforcing the aligned 30-minute grid later.
+
+**Decision:** Seed consultants only through a local command taking an existing encoded Argon2id hash. Seed is repeatable without overwriting an existing account. Use an explicit separate test database and disposable per-run schemas.
+
+**Problem:** Provision the singleton account and test integrity without adding authentication early or clearing development data.
+
+**Alternatives:** Public seed API, hard-coded passwords, installing hashing dependencies now, or destructive shared-database tests.
+
+**Reasoning:** No plaintext secret or default account is introduced. Real hashing and verification will be implemented in Milestone 2. The test command requires explicit test configuration and refuses database names without the `_test` suffix.
+
+**Trade-off:** Seed users must supply a genuine library-generated hash; format validation does not prove password strength. Test setup needs database creation permission or administrator assistance. Synthetic hashes are used solely for integrity fixtures, never usable demo credentials.
