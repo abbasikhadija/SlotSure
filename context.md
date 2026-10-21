@@ -1,3 +1,128 @@
+# Milestone 2 handoff — 2026-10-22 (Asia/Karachi)
+
+## Current milestone and scope
+
+**Milestone 2 — Authentication: implemented and verified. STOPPED.**
+The user authorized the next milestone after the verified Milestone 1 handoff.
+Milestone 3 has not begun. This section supersedes the historical notes below.
+
+SlotSure remains one consultant, customers, one consultation type, fixed 30-minute
+appointments, and a 14-day booking window. React/Vite, Express, JavaScript, pg/raw
+parameterized SQL, PostgreSQL, and same-origin frontend/API remain the agreed stack.
+No availability, booking, cancellation, PDF, or other excluded feature was added.
+
+## Implemented architecture and functionality
+
+- `createApp({ pool, config })` constructs the app; index owns the bounded pool,
+  listener, and shutdown. Health remains independent of database queries.
+- Account validation and parameterized SQL live in `services/auth.js`; auth HTTP
+  handling and rate limits live in `routes/auth.js`; middleware reads the current
+  database user and role. Sessions store user ID and CSRF state, never passwords/roles.
+- Customer registration creates only the customer role. Extra fields including role
+  are rejected. Names are trimmed (1–100 characters), email is normalized lowercase
+  (max 254), passwords are 12–128 characters and hashed with Argon2id defaults.
+- POST register, login, logout; GET me and csrf. Registration returns 201 and requires
+  a separate sign-in step. Login rotates and explicitly saves session/CSRF state.
+  CSRF token retrieval saves before responding. Logout deletes server-side session
+  state and clears the cookie; invalid credentials share a generic 401 response.
+- `002_sessions.sql` creates user_sessions and expiry index for connect-pg-simple.
+  Migration runner remains the only schema-creation mechanism. Existing migration
+  001 was preserved. Session persistence is real PostgreSQL, including after app restart.
+- HttpOnly, SameSite=Lax, host-only cookies with eight-hour lifetime; Secure in
+  production. SESSION_SECRET requires at least 32 bytes; no default secret.
+  APP_ORIGIN must be a single HTTP(S) origin and HTTPS in production. Proxy trust
+  defaults off; TRUST_PROXY=1 is only for one trusted, exclusive reverse-proxy route.
+- csrf-sync protects all unsafe API methods, including login/register/logout.
+  Mismatched supplied Origin is rejected; missing Origin still requires a valid
+  session-bound token. JSON-only mutations, 8 KiB body limit, no-store auth responses,
+  and safe consistent JSON errors. No permissive CORS was added.
+- express-rate-limit: ten failed login requests and five registration requests per
+  IP per 15 minutes; successful logins are uncounted. JSON 429 and Retry-After.
+  Counters are process-local and reset on restart; this MVP uses one API process.
+- `/api/provider` namespace guard returns 401 for anonymous clients and 403 for
+  customers. Consultants pass authorization and reach 404 because availability
+  endpoints do not exist yet. No new redundant management endpoint was introduced.
+- Existing consultant seed remains local-only and hash-based. Fixed its parameter
+  regex to accept m,p,t as emitted by argon2 0.45.1, as well as earlier m,t,p order.
+- React provides login/registration views, pending/error/success feedback, account
+  summary and logout. It uses relative fetch URLs, a fresh CSRF request before
+  mutations, no localStorage credentials, and aborts stale initial account fetches.
+
+## Dependencies and significant decisions
+
+Added argon2 0.45.1, express-session 1.19.0, connect-pg-simple 10.0.0,
+csrf-sync 4.2.1, express-rate-limit 8.7.1 and updated the root lockfile. These implement
+the specified password/session/security requirements without custom cryptography.
+Read official documentation using the read-docs workflow and inspected installed
+library APIs. See docs/DECISIONS.md for alternatives, rationale, and trade-offs.
+
+## Actual verification results
+
+Executed with Node 22.14.0, npm 10.9.2, and PostgreSQL 18.1:
+
+- Dependency install: passed; 18 packages added, 0 audit vulnerabilities reported.
+- `npm run db:migrate`: passed; new session migration applied to development DB;
+  repeat run passed without duplicating tracked migrations.
+- `npm run test:db`: final run passed **17 tests, 0 failures, 0 skipped**, real
+  PostgreSQL and actual HTTP. Includes previous database integrity tests plus account
+  registration/hashing, duplicate email, role-assignment rejection, anonymous access,
+  CSRF missing/forged/cross-session/stale token rejection, mismatched/null origins,
+  content type/invalid JSON/oversized body rejection, generic failed credentials,
+  session/CSRF rotation, old cookie replay rejection, app-restart persistence,
+  logout invalidation, consultant seed/login, role/deleted-user checks, session expiry,
+  login/registration rate limits, production Secure cookie policy, and safe JSON
+  after a real session-table outage. The outage emits the expected safe log line
+  `API request failed.`; it does not indicate a failed test.
+- `npm test`: passed **4 tests, 0 failures, 2 explicit integration-suite skips**.
+  Integration suites were separately run with test:db as recorded above.
+- `npm run db:check`: passed against real PostgreSQL (SELECT 1).
+- `npm run build`: passed, Vite 8.3.5, 16 modules transformed.
+- `npm run lint`: passed after fixing the error middleware's unused next argument
+  by correctly delegating errors when headers are already sent.
+- `npm run format:check`: passed after writing and formatting this handoff.
+- Actual in-app browser: registration with synthetic customer data, invalid password
+  feedback, successful login, authenticated reload, logout, and logged-out reload
+  all passed. Inspected the account screen at the browser's existing narrow viewport.
+  Screenshot of the verified signed-out screen: ignored `.local/auth-desktop.png`
+  (filename does not imply a desktop-width test).
+- `git diff --check`: passed after writing this handoff; local environment and screenshot
+  remain ignored. No connection strings, passwords, or secrets were printed.
+
+Initial npm installation could not resolve the registry inside the sandbox. Retried
+outside the sandbox with approval and installation succeeded. PostgreSQL/HTTP tests
+and dev servers ran outside the sandbox because loopback restrictions were already
+established. One Firecrawl GitHub scrape failed; raw official README retrieval and
+installed documentation supplied the needed API details. First integration run found
+the seed parameter-order assumption; corrected it and reran successfully. No failed
+checks remain after correction.
+
+## Local state, limitations, and immediate next step
+
+Ignored server/.env was preserved and extended with a random SESSION_SECRET and
+APP_ORIGIN=http://127.0.0.1:5173; TEST_DATABASE_URL remains slotsure_test on port 55432.
+Development migrations are applied. One synthetic browser-registration customer
+remains in development; no default credentials or consultant were seeded there.
+Integration test users/sessions exist only in disposable schemas, which were removed.
+PostgreSQL and both dev servers are running on the existing documented ports.
+No commits or pushes were made. README and .env.example document setup requirements.
+
+Not run: Node 24, separate desktop/phone viewport matrix, deployed HTTPS/TLS, production
+hosting, availability/booking races, booking management, or PDFs. Production cookie
+flags were verified with simulated trusted forwarded HTTPS headers, not a TLS deployment.
+Email verification, password recovery, and MFA are absent; this remains an MVP rather
+than a commercial identity system. Other tabs can display stale account UI after
+logout; backend authorization still rejects the destroyed session.
+
+**Next:** wait for authorization for **Milestone 3 — Availability Management**.
+Then implement consultant hours/blocks/unblocking, correct time-zone-aware slot
+generation, read-only customer availability, minimal interfaces, and tests. Use the
+required consultant-row transaction lock and preserve existing reservations. Do not
+implement booking yet. No known Milestone 2 blocker remains.
+
+---
+
+# Historical Milestone 1 handoff (retained)
+
 # Milestone 1 handoff — 2026-10-22 (Asia/Karachi)
 
 ## Current milestone

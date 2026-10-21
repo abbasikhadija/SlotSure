@@ -65,7 +65,7 @@ test(
             'SELECT count(*)::int AS count FROM schema_migrations',
           )
         ).rows[0].count,
-        1,
+        2,
       );
       const hash =
         '$argon2id$v=19$m=65536,t=3,p=1$c3ludGhldGljc2FsdA$c3ludGhldGljdGVzdGhhc2g';

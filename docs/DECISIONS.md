@@ -79,3 +79,35 @@
 **Reasoning:** No plaintext secret or default account is introduced. Real hashing and verification will be implemented in Milestone 2. The test command requires explicit test configuration and refuses database names without the `_test` suffix.
 
 **Trade-off:** Seed users must supply a genuine library-generated hash; format validation does not prove password strength. Test setup needs database creation permission or administrator assistance. Synthetic hashes are used solely for integrity fixtures, never usable demo credentials.
+
+## 2026-10-22 — Authentication and session boundaries
+
+**Decision:** Use argon2 (Argon2id defaults), express-session, connect-pg-simple, csrf-sync, and express-rate-limit. Add a versioned session-table migration; reuse the bounded application pool. Split credential service, HTTP routing, and authorization middleware; construct the app explicitly with its pool and validated configuration.
+
+**Problem:** Store passwords safely and persist authenticated state without implementing cryptography or an authentication protocol.
+
+**Alternatives:** JWT/browser token storage, an in-memory session store, or handwritten CSRF tokens and password hashing.
+
+**Reasoning:** These maintained libraries implement the required stack with focused responsibilities. The cookie carries a signed opaque session ID; user ID and CSRF state live in PostgreSQL. Login regenerates and saves the session before responding. Logout destroys it and clears the cookie. Authorization reads the current user and role from PostgreSQL on each protected request. See official [session API](https://github.com/expressjs/session), [PostgreSQL store](https://github.com/voxpelli/node-connect-pg-simple), [CSRF synchronizer](https://github.com/Psifi-Solutions/csrf-sync), [Argon2](https://github.com/ranisalt/node-argon2), and [rate limiter](https://github.com/express-rate-limit/express-rate-limit) documentation. Installed versions were also inspected locally and behavior tested on Node 22.14.
+
+**Trade-off:** Protected requests query PostgreSQL. Argon2 work has a deliberate memory/CPU cost. Process-local rate counters fit one API process but reset on restart and do not coordinate multiple instances. No email verification, password reset, or commercial identity-system claim.
+
+**Decision:** Register accounts separately from login, force the customer role, reject unexpected fields, normalize email, and use long passwords (12–128 characters). Keep only non-sensitive account fields in JSON. Retain the controlled consultant hash-based seed and accept both parameter orders emitted by established Argon2 libraries.
+
+**Problem:** Avoid role escalation and ambiguous outcomes when account creation succeeds but session persistence fails.
+
+**Alternatives:** Automatic login during registration or a transaction spanning account/session creation.
+
+**Reasoning:** Separate steps have clear outcomes and avoid coupling password/account storage to session-store internals. Real PostgreSQL integration tests revealed that argon2 0.45.1 emits m,p,t parameter ordering, while the earlier seed assumed m,t,p; both are now accepted and seeded consultant login is verified.
+
+**Trade-off:** Registration needs a separate sign-in action. Duplicate registration reports email unavailable, so account existence is not confidential; rate limits reduce abuse. Unknown-account login still performs Argon2 verification and returns the same credential error.
+
+**Decision:** Require a configured random session secret; use HttpOnly/SameSite=Lax cookies, Secure in production, an eight-hour lifetime, JSON bodies, a no-store policy, and session-bound CSRF tokens on all unsafe API methods including login/logout/register. Reject mismatched supplied origins. Default proxy trust is off; allow a single explicitly trusted proxy for future HTTPS hosting.
+
+**Problem:** Browser cookies are sent automatically and can otherwise authorize cross-site requests; session fixation and stale account roles must not grant access.
+
+**Alternatives:** SameSite alone, permissive CORS, or custom security token code.
+
+**Reasoning:** An established synchronizer-token middleware works with the chosen server-side session store. Exact-origin checks supplement it; clients without Origin still need a valid token. React fetches a token before each mutation, holds no bearer credentials in browser storage, and cancels stale initial account requests. Tests verify missing/forged/cross-session tokens, old-session replay, expiry, cookie flags, and role checks after database changes.
+
+**Trade-off:** Other tabs can have stale UI after logout; the backend remains authoritative. Production cookie configuration is tested behind simulated forwarded HTTPS headers; real TLS deployment remains unverified. Endpoint/body limits and rate limiting are intentionally small for this MVP.

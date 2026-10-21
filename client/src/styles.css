@@ -37,6 +37,135 @@ footer {
   font-size: 13px;
   color: #5d7168;
 }
+.account-layout {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 48px;
+  align-items: center;
+  padding: 70px 0;
+}
+.hero {
+  padding: 0;
+}
+.hero h1 {
+  font-size: clamp(42px, 5.3vw, 68px);
+}
+.account-card {
+  padding: 32px;
+  background: #fffef9;
+  border: 1px solid #dce1d5;
+  border-radius: 16px;
+  box-shadow: 0 12px 32px #123b3608;
+}
+h2 {
+  margin: 18px 0 12px;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+.form-intro,
+.account-email {
+  color: #52675e;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+form {
+  display: grid;
+  gap: 18px;
+  margin-top: 28px;
+}
+label {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #b4c2b8;
+  border-radius: 7px;
+  padding: 12px;
+  font: inherit;
+  color: #123b36;
+  background: #fff;
+}
+button {
+  border: 0;
+  border-radius: 7px;
+  padding: 13px 20px;
+  background: #123b36;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+button:hover {
+  background: #24564b;
+}
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: 3px solid #758b34;
+  outline-offset: 3px;
+}
+.text-button {
+  padding: 3px 0;
+  color: #123b36;
+  background: transparent;
+  text-decoration: underline;
+}
+.text-button:hover {
+  color: #48651b;
+  background: transparent;
+}
+.switch-view {
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 22px 0 0;
+  color: #52675e;
+}
+.feedback {
+  padding: 12px;
+  border-radius: 7px;
+  background: #eaf0df;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.feedback.error {
+  background: #fae9e4;
+  color: #843b29;
+}
+.role-badge {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 5px;
+  color: #365018;
+  background: #eaf0df;
+  font-size: 13px;
+}
+form .note {
+  margin: -6px 0 0;
+}
+@media (max-width: 820px) {
+  .account-layout {
+    grid-template-columns: 1fr;
+    gap: 34px;
+    padding: 48px 0;
+  }
+  .hero h1 {
+    font-size: clamp(42px, 8vw, 64px);
+  }
+  .account-card {
+    max-width: 520px;
+    width: 100%;
+  }
+}
 section {
   padding: 85px 0 65px;
 }

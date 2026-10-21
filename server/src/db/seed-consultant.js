@@ -9,7 +9,7 @@ export async function seedConsultant(pool, { name, email, passwordHash }) {
     typeof email !== 'string' ||
     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ||
     typeof passwordHash !== 'string' ||
-    !/^\$argon2id\$v=19\$m=\d+,t=\d+,p=\d+\$[A-Za-z0-9+/]+\$[A-Za-z0-9+/]+$/.test(
+    !/^\$argon2id\$v=19\$(?:m=\d+,t=\d+,p=\d+|m=\d+,p=\d+,t=\d+)\$[A-Za-z0-9+/]+\$[A-Za-z0-9+/]+$/.test(
       passwordHash,
     )
   ) {

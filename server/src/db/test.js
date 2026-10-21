@@ -6,7 +6,7 @@ if (!process.env.TEST_DATABASE_URL) {
 } else {
   const result = spawnSync(
     process.execPath,
-    ['--test', 'tests/database.test.js'],
+    ['--test', 'tests/database.test.js', 'tests/auth.test.js'],
     { stdio: 'inherit', env: process.env },
   );
   process.exitCode = result.status ?? 1;

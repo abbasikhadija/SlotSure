@@ -6,7 +6,7 @@ SlotSure will help independent consultants and their customers replace manual sc
 
 ## Current status
 
-Milestone 1 database foundation implemented, alongside a React status page, Express health endpoint, PostgreSQL connectivity command, linting, formatting, and automated foundation checks. Authentication, booking, availability, cancellations, and PDF confirmations are planned, not available yet.
+Milestone 2 authentication is implemented: customer registration, login/logout, PostgreSQL-backed sessions, consultant authorization, and minimal account screens. Database migrations, integrity tests, and foundation checks remain available. Appointment availability, booking, cancellations, and PDF confirmations are planned.
 
 Read [PROJECT_SPEC.md](PROJECT_SPEC.md) for requirements and [context.md](context.md) for the verified handoff.
 
@@ -54,13 +54,13 @@ npm run dev:server
 npm run dev:client
 ```
 
-Open [SlotSure locally](http://127.0.0.1:5173). The page should report `API connected`. API liveness is also available at [the health endpoint](http://127.0.0.1:3000/api/health). Liveness does not check PostgreSQL; use `db:check` for that.
+Configure the session secret and apply migrations using the authentication setup instructions below before starting the API. Open [SlotSure locally](http://127.0.0.1:5173) to register or sign in. API liveness is also available at [the health endpoint](http://127.0.0.1:3000/api/health). Liveness does not check PostgreSQL; use `db:check` for that.
 
 `PORT` defaults to 3000 and `HOST` to `127.0.0.1`; if changing the API port, update `client/vite.config.js` too. `CONSULTANT_TIME_ZONE` defaults to `Asia/Karachi` and is validated as an IANA zone. Appointment-time behavior is deferred. The backend reads `server/.env`; exported environment variables take precedence. No frontend environment file is needed.
 
 ### Instance prepared in this workspace
 
-For foundation verification, an isolated PostgreSQL 18.1 cluster was initialized in ignored `.local/postgres`, with an empty `slotsure` database on loopback port **55432**. Its generated credentials are already in ignored `server/.env`. On this workspace, keep that file rather than copying over it. The database and both development servers were left running at handoff.
+An isolated PostgreSQL 18.1 cluster exists in ignored `.local/postgres`, with the migrated `slotsure` database on loopback port **55432**. Its generated credentials are already in ignored `server/.env`. On this workspace, keep that file rather than copying over it. The database and both development servers were left running at handoff.
 
 After restarting the machine, start this local cluster from the repository root:
 
@@ -92,13 +92,13 @@ Use `npm run format` to format authored files. `PROJECT_SPEC.md` is preserved un
 
 ## Planned database and reliability
 
-Later milestones introduce users, weekly hours, blocked slots, bookings, and a PostgreSQL session store. Confirmed bookings will use a partial unique index on start times. Schedule mutations will share a transaction-scoped consultant-row lock, with business rules rechecked after acquiring it. The partial unique index is implemented; transactional schedule services remain planned.
+Migrations implement users, weekly hours, blocked slots, bookings, and PostgreSQL sessions. Confirmed bookings use a partial unique index on start times. Future schedule mutations will share a transaction-scoped consultant-row lock, with business rules rechecked after acquiring it. Transactional schedule services remain planned.
 
 ## Limitations
 
-No authentication, appointment APIs, PDFs, deployment, or demo accounts exist yet. Future authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No screenshots or deployment links are available.
+No appointment APIs, PDFs, deployment, or default demo credentials exist yet. Authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No deployment link is available.
 
-See [engineering decisions](docs/DECISIONS.md). Milestone 1 requires explicit authorization.
+See [engineering decisions](docs/DECISIONS.md). Milestone 3 requires explicit authorization.
 
 ## Milestone 1 database setup
 
@@ -115,7 +115,7 @@ password-hashing library, using a randomly salted password chosen locally. Quote
 it with single quotes in the environment file to preserve its dollar signs. Never
 use the synthetic test hash as an account credential. The seed accepts no plaintext
 password, creates at most one consultant, and leaves an existing consultant unchanged.
-It has no HTTP endpoint. Password hashing and authentication are Milestone 2 work.
+It has no HTTP endpoint. Password hashing and authentication are implemented in Milestone 2.
 
 Run `npm run db:test:setup` to create `slotsure_test` without dropping any database.
 This requires CREATEDB permission; alternatively ask the database administrator to
@@ -136,3 +136,54 @@ prevents deleting referenced users. Future services must enforce customer role,
 consultant-local slot alignment, the booking window, working hours, and cross-table
 booking/block conflicts using the specified consultant-row locking protocol. These
 business rules are not yet implemented by the schema alone.
+
+## Milestone 2 authentication setup
+
+Before starting the API, configure `SESSION_SECRET` in `server/.env` with at least
+32 random bytes. Generate it directly into that ignored file without printing it:
+
+```powershell
+node --input-type=module -e "import fs from 'node:fs'; import {randomBytes} from 'node:crypto'; const f='server/.env'; let s=fs.readFileSync(f,'utf8'); s=s.replace(/^SESSION_SECRET=.*$/m,'SESSION_SECRET='+randomBytes(32).toString('hex')); fs.writeFileSync(f,s);"
+```
+
+The example environment includes the placeholder line this command replaces. The
+prepared workspace already has a generated secret; keep it. Changing it invalidates
+existing cookies. Apply `npm run db:migrate` to create `user_sessions` before login.
+
+`APP_ORIGIN` is the exact browser origin, default `http://127.0.0.1:5173`; use that
+address consistently. Do not switch between localhost and 127.0.0.1. Production
+requires `NODE_ENV=production`, an HTTPS APP_ORIGIN, and HTTPS access. Cookies are
+HttpOnly, SameSite=Lax, host-only, and Secure in production, with an eight-hour
+lifetime. `TRUST_PROXY=0` is the default. Use `TRUST_PROXY=1` only when deploying
+behind exactly one trusted proxy that overwrites forwarded headers and is the only
+route to the backend. HTTPS deployment has not been performed or verified.
+
+The page provides customer registration, login, an account summary, and logout.
+Registration creates a customer account and then asks the user to sign in. Names
+are 1–100 characters, passwords 12–128 characters, and email addresses are trimmed
+and lowercased. Passwords are salted and hashed using the Argon2id library defaults.
+The server rejects client-supplied roles and extra account fields. Consultant accounts
+still use the local seed command and genuine externally generated Argon2id hashes.
+
+API flow: GET `/api/auth/csrf` before a mutation; send its token in `X-CSRF-Token`
+and a JSON request body. POST `/api/auth/register`, `/api/auth/login`, and
+`/api/auth/logout` are protected. Login regenerates the session ID and returns a new
+CSRF token. GET `/api/auth/me` returns the current account or 401. Unsafe requests
+with a supplied Origin must match APP_ORIGIN; clients without Origin still require
+a session-bound CSRF token. There is no cross-origin CORS access. Auth responses
+are not cacheable. Roles are read from PostgreSQL rather than trusted from the client
+or a stale role stored in the session. The future `/api/provider` namespace rejects
+anonymous callers (401) and customers (403); consultant requests currently reach
+404 because no availability endpoint exists yet.
+
+Login allows ten failed requests per IP per 15 minutes; successful requests are not
+counted. Registration allows five requests per IP per 15 minutes. Excess requests
+receive JSON 429 responses and Retry-After. These counters are process-local and
+reset on restart; the MVP runs as a single API process. Sessions themselves persist
+in PostgreSQL across application restarts and are deleted on logout. Email verification,
+password recovery, MFA, and appointment functionality are outside this milestone.
+
+Run `npm run test:db` for both schema and HTTP authentication integration tests
+against real PostgreSQL. Run `npm test` for validation/configuration/foundation tests;
+the two integration suites are explicitly skipped there unless TEST_DATABASE_URL is
+exported. No mock session store is substituted for PostgreSQL.

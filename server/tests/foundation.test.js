@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import test from 'node:test';
-import { app } from '../src/app.js';
-import { readConfig } from '../src/config.js';
+import { createApp } from '../src/app.js';
+import { readConfig, readAuthConfig } from '../src/config.js';
+import pg from 'pg';
 
 test('health responds over HTTP; unknown routes return safe JSON', async () => {
+  const pool = new pg.Pool();
+  const app = createApp({
+    pool,
+    config: readAuthConfig({
+      SESSION_SECRET: 'test-only-secret-with-at-least-32-bytes',
+    }),
+  });
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   try {
@@ -21,6 +29,8 @@ test('health responds over HTTP; unknown routes return safe JSON', async () => {
       error: { code: 'NOT_FOUND', message: 'Route not found' },
     });
   } finally {
+    await app.locals.sessionStore.close();
+    await pool.end();
     await new Promise((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );
