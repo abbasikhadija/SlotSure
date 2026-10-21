@@ -316,10 +316,10 @@ test(
             ).data.user.role,
             'consultant',
           );
-          // Authorized requests reach the normal 404: availability is not implemented.
+          // Consultant authorization now reaches the implemented hours endpoint.
           assert.equal(
             (await consultant.request('/api/provider/hours')).status,
-            404,
+            200,
           );
           await pool.query(
             "UPDATE users SET role='customer' WHERE email='consultant@example.test'",

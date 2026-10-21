@@ -111,3 +111,45 @@
 **Reasoning:** An established synchronizer-token middleware works with the chosen server-side session store. Exact-origin checks supplement it; clients without Origin still need a valid token. React fetches a token before each mutation, holds no bearer credentials in browser storage, and cancels stale initial account requests. Tests verify missing/forged/cross-session tokens, old-session replay, expiry, cookie flags, and role checks after database changes.
 
 **Trade-off:** Other tabs can have stale UI after logout; the backend remains authoritative. Production cookie configuration is tested behind simulated forwarded HTTPS headers; real TLS deployment remains unverified. Endpoint/body limits and rate limiting are intentionally small for this MVP.
+
+## 2026-10-22 — Availability rules, snapshots, and serialized writes
+
+**Decision:** Use Luxon for server-side IANA-zone arithmetic, and Intl for browser display. Define the window as 14 consultant-local calendar dates (today through today+13), excluding starts at or before now. Require explicit-offset instants for blocks. Iterate elapsed 30-minute intervals within the local day, checking the first and final occupied instants against local weekly hours.
+
+**Problem:** Calendar days, UTC instants, and wall-clock grid boundaries differ, particularly across DST or non-hour offsets.
+
+**Alternatives:** Adding a hard-coded Karachi offset, assuming every local day lasts 24 hours, or constructing ambiguous local wall times directly.
+
+**Reasoning:** Calendar-day addition establishes date bounds; minute addition preserves exact appointment duration. Walking the real timeline avoids fabricated spring times and preserves both autumn occurrences. Labels include offsets. Luxon's [official zone documentation](https://github.com/moment/luxon/blob/master/docs/zones.md) explains elapsed-unit versus calendar-unit arithmetic. Tests exercise Karachi local midnight, Kathmandu's 45-minute offset, spring gaps, autumn repeats, midnight interval ends, and exact 30-minute durations.
+
+**Trade-off:** Today is one of the 14 dates, so the final date is today+13 rather than a rolling 336-hour horizon. An appointment crossing a clock change may have a surprising displayed end time but still lasts exactly 30 elapsed minutes. Changing the configured zone reinterprets weekly hours; persisted appointment instants remain unchanged.
+
+**Decision:** Derive a day's availability with one parameterized SQL statement returning its weekly rule and date-bounded occupied instants. Exclude both confirmed reservations and blocks, including overlaps; canceled history does not occupy a time. Default missing date to the consultant's today and return calendar bounds in the same response.
+
+**Problem:** Avoid inconsistent multi-query snapshots, private-customer leakage, one query per generated slot, and browser-local date assumptions.
+
+**Alternatives:** Persisting generated slots, N+1 queries, or adding an extra configuration/metadata endpoint.
+
+**Reasoning:** PostgreSQL gives a single statement a consistent snapshot. Existing time indexes bound the occupied-time scans. A small pure function generates the day's slots without persistent slot rows. The metadata is sufficient for both consultant and customer date selection.
+
+**Trade-off:** Availability can change after the response. Selection is explicitly read-only in Milestone 3; Milestone 4 must revalidate after acquiring the schedule lock before inserting a booking. No booking APIs were implemented here.
+
+**Decision:** Implement the required consultant-row locking protocol now for weekly-hours replacement, block creation, and unblock deletion. Share a focused withScheduleLock helper used by all three actual mutations. Use one checked-out client and recheck time, grid, hours, and occupied-time rules after lock acquisition.
+
+**Problem:** Concurrent schedule changes must not validate against stale working hours or silently alter existing reservations.
+
+**Alternatives:** Uncoordinated writes, advisory locks, serializable isolation, or application-only checks.
+
+**Reasoning:** One consultant makes row-lock serialization a practical, understandable choice. Replace the week atomically, retain bookings/blocks, and return a count of future reservations outside the new hours. Real PostgreSQL tests observe a blocking PID, change hours while holding the lock, then verify the waiting block request rejects the newly invalid time. Concurrent duplicate blocks produce one row and one conflict. Rollback tests verify state recovery.
+
+**Trade-off:** Writes serialize for this consultant. The protocol only coordinates participants; all future booking/cancellation writes must reuse it. Booking race guarantees are still unverified until Milestone 4. Expired block rows are retained in storage and omitted from the current-window management list.
+
+**Decision:** Reuse one slot picker for public/customer selection and consultant blocking, with a separate weekly-hours editor and blocked list. Abort replaced availability requests and clear selections on date/refresh/schedule changes. Keep React built-in state and existing styling.
+
+**Problem:** Provide the milestone's actual workflows without premature booking UI or a generic component framework.
+
+**Alternatives:** Duplicate calendars, a date-picker dependency, a router/state framework, or a disabled booking scaffold.
+
+**Reasoning:** Native date and half-hour select controls suffice. The same response drives the actual shared picker. Provider schedule mutations remount the picker to refresh current hours and occupancy; successful blocking refreshes its date and the block list.
+
+**Trade-off:** Changing weekly hours or unblocking resets the consultant picker to today. Other browser tabs require refresh for changed availability; no live-update infrastructure was added.

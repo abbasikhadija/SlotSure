@@ -6,7 +6,7 @@ SlotSure will help independent consultants and their customers replace manual sc
 
 ## Current status
 
-Milestone 2 authentication is implemented: customer registration, login/logout, PostgreSQL-backed sessions, consultant authorization, and minimal account screens. Database migrations, integrity tests, and foundation checks remain available. Appointment availability, booking, cancellations, and PDF confirmations are planned.
+Milestone 3 availability management is implemented: consultant weekly hours, individual blocks/unblocking, time-zone-aware availability, and customer date/time selection. Customer authentication and PostgreSQL-backed sessions remain available. Booking, cancellations, and PDF confirmations are planned; selecting a time does not reserve it.
 
 Read [PROJECT_SPEC.md](PROJECT_SPEC.md) for requirements and [context.md](context.md) for the verified handoff.
 
@@ -80,6 +80,7 @@ This disposable development cluster uses password authentication and is not a pr
 
 ```powershell
 npm test
+npm run test:db
 npm run db:check
 npm run lint
 npm run format:check
@@ -92,13 +93,13 @@ Use `npm run format` to format authored files. `PROJECT_SPEC.md` is preserved un
 
 ## Planned database and reliability
 
-Migrations implement users, weekly hours, blocked slots, bookings, and PostgreSQL sessions. Confirmed bookings use a partial unique index on start times. Future schedule mutations will share a transaction-scoped consultant-row lock, with business rules rechecked after acquiring it. Transactional schedule services remain planned.
+Migrations implement users, weekly hours, blocked slots, bookings, and PostgreSQL sessions. Confirmed bookings use a partial unique index on start times. Availability mutations now acquire a transaction-scoped lock on the consultant row, then recheck schedule-dependent rules on the same checked-out client. Future booking and cancellation mutations must use that protocol too. Full booking concurrency verification belongs to Milestone 4.
 
 ## Limitations
 
-No appointment APIs, PDFs, deployment, or default demo credentials exist yet. Authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No deployment link is available.
+No booking/cancellation APIs, PDFs, deployment, or distributed default demo credentials exist yet. Authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No deployment link is available.
 
-See [engineering decisions](docs/DECISIONS.md). Milestone 3 requires explicit authorization.
+See [engineering decisions](docs/DECISIONS.md). Milestone 4 requires explicit authorization.
 
 ## Milestone 1 database setup
 
@@ -172,9 +173,8 @@ CSRF token. GET `/api/auth/me` returns the current account or 401. Unsafe reques
 with a supplied Origin must match APP_ORIGIN; clients without Origin still require
 a session-bound CSRF token. There is no cross-origin CORS access. Auth responses
 are not cacheable. Roles are read from PostgreSQL rather than trusted from the client
-or a stale role stored in the session. The future `/api/provider` namespace rejects
-anonymous callers (401) and customers (403); consultant requests currently reach
-404 because no availability endpoint exists yet.
+or a stale role stored in the session. The `/api/provider` namespace rejects
+anonymous callers (401) and customers (403); consultants can now manage hours and blocks.
 
 Login allows ten failed requests per IP per 15 minutes; successful requests are not
 counted. Registration allows five requests per IP per 15 minutes. Excess requests
@@ -185,5 +185,65 @@ password recovery, MFA, and appointment functionality are outside this milestone
 
 Run `npm run test:db` for both schema and HTTP authentication integration tests
 against real PostgreSQL. Run `npm test` for validation/configuration/foundation tests;
-the two integration suites are explicitly skipped there unless TEST_DATABASE_URL is
+the three integration suites are explicitly skipped there unless TEST_DATABASE_URL is
 exported. No mock session store is substituted for PostgreSQL.
+
+## Milestone 3 availability workflow
+
+Sign in as the locally seeded consultant to edit weekly working hours. Enable a
+weekday and choose one continuous interval on the 30-minute grid. `24:00` is allowed
+as an end boundary. Unchecked days are unavailable. Saving replaces the whole week
+atomically. Existing confirmed reservations are preserved; a warning reports how
+many future reservations fall outside the new hours. It never cancels them.
+
+Use **Block an appointment** to select a date and available time, then block it.
+Blocks disappear from availability immediately after refresh. **Blocked appointments**
+lists the current booking window and allows unblocking, including blocks that no
+longer fall inside the latest weekly hours. Blocking a booked or already blocked
+appointment returns 409. Repeated deletion returns 404 without changing other rows.
+
+Visitors and signed-in customers can choose a date and time. Selection is read-only;
+there is no booking button or booking API in this milestone. Refresh clears stale
+selections. All labels use the consultant's IANA time zone, including UTC offsets
+that distinguish repeated daylight-saving times.
+
+The booking window is exactly **14 consultant-local calendar dates: today through
+13 days ahead**, inclusive. Starts at or before the current instant are excluded.
+Appointments last 30 elapsed minutes. Luxon walks real instants within each local
+day, avoiding nonexistent spring times and preserving distinct autumn occurrences.
+No manual UTC offsets are added. Missing `date` defaults to the consultant's today
+and returns server-computed date bounds so the browser does not assume its own zone.
+Invalid dates and dates outside the window return 400. Availability is a snapshot,
+not a reservation; Milestone 4 must revalidate it inside the booking transaction.
+
+Availability API:
+
+- GET `/api/availability?date=YYYY-MM-DD`: date, timeZone, minDate, maxDate,
+  durationMinutes, and slots containing UTC startsAt/endsAt. No customer details.
+- GET/PUT `/api/provider/hours`: PUT JSON `{ "hours": [{ "weekday": 1,
+"startTime": "09:00", "endTime": "17:00" }] }`; omitted weekdays are unavailable.
+  Responses include outsideHoursCount. Weekdays follow ISO Monday=1 through Sunday=7.
+- GET `/api/provider/blocks`: blocks within the current 14-date window.
+- POST `/api/provider/blocks`: JSON `{ "startsAt": "2026-10-22T09:00:00+05:00" }`
+  (replace this example with a future in-window time from availability).
+- DELETE `/api/provider/blocks/:id`: JSON `{}`. All mutations require a session-bound
+  CSRF token and consultant authorization, as described above.
+
+Availability executes one bounded SQL statement per requested day, reading hours,
+confirmed reservations, and blocks from the same database snapshot. Generated slots
+are never persisted. Hours replacement, blocking, and unblocking use one checked-out
+client, a consultant-row FOR UPDATE lock, commit/rollback, and reliable release.
+This serializes the single consultant's schedule writes; future booking writes must
+participate in the same protocol. No advisory locks, ORM, or additional infrastructure.
+
+`npm test` includes pure date/grid/window/DST tests. `npm run test:db` includes real
+PostgreSQL schedule/API tests, rollback tests, concurrent duplicate blocks, and an
+observed row-lock wait proving validation uses the hours committed while waiting.
+Booking-versus-booking and booking-versus-block HTTP races remain Milestone 4 work.
+
+For browser verification in this prepared workspace, a synthetic consultant was
+created through the existing controlled seed. Its private credentials are in ignored
+`.local/availability-demo.env`. Do not commit or publish that file. The demo schedule
+has Thursday 09:00–10:00 in Asia/Karachi; other days are unavailable. Browser test
+blocks were removed and no booking was created. Other checkouts must create their
+own consultant using the documented seed command.

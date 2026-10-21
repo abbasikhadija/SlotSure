@@ -2,6 +2,8 @@ import { createRoot } from 'react-dom/client';
 import { createElement, useEffect, useState } from 'react';
 import './styles.css';
 import { api } from './lib/api.js';
+import { SlotPicker } from './components/SlotPicker.jsx';
+import { ConsultantAvailability } from './components/ConsultantAvailability.jsx';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -114,7 +116,9 @@ function App() {
                 {user.role === 'consultant' ? 'Consultant' : 'Customer'} account
               </span>
               <p className="note">
-                Your account is ready. Appointment scheduling is coming soon.
+                {user.role === 'consultant'
+                  ? 'Manage your working hours and individual time blocks below.'
+                  : 'Explore available consultation times below.'}
               </p>
               <button type="button" onClick={logout} disabled={busy}>
                 {busy ? 'Signing out…' : 'Sign out'}
@@ -216,6 +220,12 @@ function App() {
           )}
         </section>
       </div>
+      {!loading &&
+        (user?.role === 'consultant' ? (
+          <ConsultantAvailability key={user.id} />
+        ) : (
+          <SlotPicker key={user?.id ?? 'visitor'} />
+        ))}
       <footer>SlotSure / Built around your time.</footer>
     </main>
   );

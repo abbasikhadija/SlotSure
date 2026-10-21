@@ -2,8 +2,8 @@ import { createApp } from './app.js';
 import { readConfig, readAuthConfig } from './config.js';
 import { createPool } from './db/pool.js';
 
-const { port, host } = readConfig();
-const config = readAuthConfig();
+const { port, host, timeZone } = readConfig();
+const config = { ...readAuthConfig(), timeZone };
 const pool = createPool();
 const app = createApp({ pool, config });
 const server = app.listen(port, host, () =>

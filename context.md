@@ -1,3 +1,131 @@
+# Milestone 3 handoff — 2026-10-22 (Asia/Karachi)
+
+## Current milestone and boundaries
+
+**Milestone 3 — Availability Management: implemented and verified. STOPPED.**
+The user authorized continuing after Milestone 2. Milestone 4 has not begun.
+This section supersedes the historical handoffs retained below.
+
+MVP remains one consultant, customers, one consultation type, 30-minute appointments,
+and a 14-day booking window. JavaScript, React/Vite, Express, PostgreSQL, pg and
+parameterized SQL remain the stack. Existing authentication, sessions, security,
+schema constraints, and useful frontend work were preserved. No booking/cancellation
+API, reservation submission, confirmation screen, PDF, or excluded feature was added.
+
+## Implemented architecture and behavior
+
+- Added Luxon 3.7.2 to the server and updated the root lockfile. The existing configured
+  IANA zone now reaches the availability service through index/createApp; default
+  remains Asia/Karachi. Intl formats browser labels in that zone with UTC offsets.
+- `services/slots.js`: shared pure date/window/grid/hour/overlap rules. The window is
+  **14 consultant-local dates, today through today+13 inclusive**, with starts at or
+  before now excluded. A final slot may end exactly at midnight. Slots last exactly
+  30 elapsed minutes. No manual UTC offsets are added.
+- Walk real instants within a local day rather than constructing ambiguous local
+  times: spring gaps are absent, autumn repetitions retain distinct UTC instants.
+  The first and final occupied instants must remain within the local working interval.
+- `services/availability.js`: one domain SQL statement per requested date reads a
+  consistent PostgreSQL snapshot of weekly hours and date-bounded blocked/confirmed
+  instants. Session middleware may perform its own constant session-store queries.
+  No per-slot queries or persistent generated slots. Canceled history is excluded
+  from occupied times; overlapping occupied instants are handled defensively.
+- GET `/api/availability?date=YYYY-MM-DD` is public and returns only date, timeZone,
+  minDate, maxDate, durationMinutes, and slots with UTC startsAt/endsAt. Missing date
+  defaults to consultant-local today so the browser obtains authoritative bounds.
+  Invalid/repeated date parameters and out-of-window dates return safe 400 errors.
+- GET/PUT `/api/provider/hours` supports full-week replacement of up to seven ISO
+  weekday intervals, one per day. Omitted weekdays mean unavailable; boundaries
+  must align to 00/30 minutes; 24:00 is supported only as an end; overnight/equal
+  boundaries, duplicates, extra fields, and malformed inputs are rejected.
+- GET/POST `/api/provider/blocks` and DELETE `/api/provider/blocks/:id`: list current
+  window blocks, block valid future working slots, and unblock. Duplicate blocks
+  and conflicts with confirmed reservations return 409; missing blocks return 404.
+  Existing bookings are never canceled or modified. Existing blocks survive hours changes.
+- `db/schedule-transaction.js`: actual shared helper for all three schedule mutations.
+  Checks out one client, begins a transaction, obtains the consultant-row FOR UPDATE
+  lock, executes the operation, commits/rolls back, and releases the client. Block
+  time/grid/window/hours/occupancy checks happen after lock acquisition. Missing
+  consultant returns controlled 503. Future booking/cancellation writes must join
+  this same protocol and revalidate using their checked-out transaction client.
+- Hours reads/saves return outsideHoursCount for existing future confirmed bookings.
+  The consultant UI warns about that count while preserving all reservation records.
+- React shares SlotPicker between visitors/customers and consultant blocking, with
+  separate ConsultantAvailability weekly-hours and block-list management. Requests
+  are aborted on replacement/unmount; date/refresh/schedule changes clear selections.
+  Empty/loading/error/success states and labeled controls are provided. Date/time
+  selection explicitly creates no reservation. Changing hours/unblocking resets the
+  consultant picker to today; other tabs require a refresh for schedule updates.
+- No schema migration was needed; the existing tables/indexes already support this
+  milestone. The auth test now expects consultant hours GET to succeed rather than 404.
+
+## Actual commands and verification
+
+Executed with Node 22.14.0, npm 10.9.2, PostgreSQL 18.1:
+
+- `npm install --workspace server luxon --fetch-retries=0 --fetch-timeout=15000`:
+  passed after sandbox DNS failure and approved retry outside sandbox; one package
+  added, audit reported 0 vulnerabilities (240 packages audited).
+- `npm test`: passed **9 tests, 0 failures, 3 explicitly skipped integration suites**.
+  Includes date parsing/window edges, local midnight, past exclusion, exact duration,
+  overlap exclusion, weekly-hour validation, explicit-offset/grid validation,
+  Kathmandu non-hour offset, midnight end, DST spring gap and autumn repeated times.
+- `npm run test:db`: passed **28 tests, 0 failures, 0 skipped** using real PostgreSQL
+  and HTTP. Includes all prior schema/auth tests plus availability metadata/privacy,
+  consultant authorization and CSRF, valid/invalid week updates, one-query domain
+  generation, invalid dates, blocking/unblocking, duplicate/conflict responses,
+  canceled-history availability, reservation preservation and warning counts,
+  rollback and missing-consultant handling, concurrent duplicate blocks, and an
+  actual observed PostgreSQL row-lock wait with post-lock working-hour revalidation.
+  Existing auth outage test intentionally logs the safe `API request failed.` line.
+- `npm run db:check`: passed, real SELECT 1. Count-only browser-fixture check found
+  one working weekday, zero blocks, zero bookings in development after verification.
+- `npm run lint`: passed.
+- `npm run format:check`: passed after writing and formatting this handoff.
+- `npm run build`: passed after final UI change, Vite 8.3.5, 19 modules transformed.
+- Actual in-app browser at its existing desktop viewport: consultant login; enabled
+  Thursday 09:00–10:00; saved hours; selected/blocked 09:00; confirmed it disappeared
+  while 09:30 remained; unblocked and confirmed 09:00 returned. Then signed in as the
+  existing synthetic customer, changed date to 2026-10-29, selected 09:00, and saw
+  the explicit no-reservation notice. Date changes cleared previous selection.
+  Saved ignored screenshots `.local/availability-blocked.png` and
+  `.local/availability-selection.png`; visually inspected both.
+- `git diff --check`: passed after writing this handoff. Environment/fixture/screenshots
+  remain ignored; no secrets were printed or tracked. No commits or pushes made.
+
+No application-test failures occurred. Browser automation initially appended text
+into an autofilled email field; replaced values and continued successfully. Its
+first date-fill attempt did not change the date; native setValue did, and the final
+AX state and screenshot verified the actual selected date and time. These were
+interaction corrections rather than application workarounds. Tests and connectivity
+used approved outside-sandbox execution because loopback restrictions were established.
+
+## Local state, limitations, and next step
+
+Existing development servers were reused at ports 3000/5173; PostgreSQL remains on 55432. Existing ignored server/.env was preserved. A synthetic consultant was seeded
+only after confirming none existed, through the existing controlled seed function.
+Private demo email/password are in ignored `.local/availability-demo.env`; they were
+not printed. One browser-created customer from Milestone 2 remains. The demo week
+has Thursday 09:00–10:00 only; browser test blocks were removed; no booking was made.
+Disposable integration-test schemas and all contained fixtures were cleaned up.
+
+Not run: Node 24, mobile viewport matrix, deployed HTTPS/production hosting, the full
+customer booking/PDF journey, or booking-versus-booking / booking-versus-block HTTP
+race tests. Those booking races require the real booking engine in Milestone 4.
+Availability is a snapshot, not a reservation. Other tabs need refresh. Expired blocks
+remain stored but are omitted from the current-window management list. No known
+Milestone 3 blocker remains. See docs/DECISIONS.md for decisions and trade-offs.
+
+**Immediate next step:** wait for authorization for **Milestone 4 — Booking Engine**.
+Implement authenticated customer booking, server validation after acquiring the shared
+consultant-row lock, persistence/conflicts, customer submission/confirmation UI,
+duplicate-submission handling, and real PostgreSQL booking/booking and booking/block
+races. Reuse the existing slot rules and perform every transaction query on the same
+checked-out client. Do not begin booking management or PDFs in that milestone.
+
+---
+
+# Historical Milestone 2 handoff (retained)
+
 # Milestone 2 handoff — 2026-10-22 (Asia/Karachi)
 
 ## Current milestone and scope

@@ -5,6 +5,8 @@ import { csrfSync } from 'csrf-sync';
 import { authRouter } from './routes/auth.js';
 import { requireUser, requireConsultant } from './middleware/auth.js';
 import { HttpError, errorHandler } from './http-error.js';
+import { createAvailabilityService } from './services/availability.js';
+import { providerAvailabilityRouter } from './routes/availability.js';
 
 export function createApp({ pool, config, sessionSchema = 'public' }) {
   const app = express();
@@ -69,8 +71,19 @@ export function createApp({ pool, config, sessionSchema = 'public' }) {
     '/api/auth',
     authRouter({ pool, generateToken, cookieName, cookieOptions }),
   );
-  // Guard the future consultant namespace without implementing availability APIs.
-  app.use('/api/provider', requireUser(pool), requireConsultant);
+  const availability = createAvailabilityService({
+    pool,
+    timeZone: config.timeZone ?? 'Asia/Karachi',
+  });
+  app.get('/api/availability', async (req, res) =>
+    res.json(await availability.availability(req.query.date)),
+  );
+  app.use(
+    '/api/provider',
+    requireUser(pool),
+    requireConsultant,
+    providerAvailabilityRouter(availability),
+  );
   app.use((_req, res) =>
     res
       .status(404)
