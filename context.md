@@ -1,3 +1,101 @@
+# Milestone 6 handoff — 2026-10-22 (Asia/Karachi)
+
+## Current status and boundaries
+
+**Milestone 6 — PDF Confirmation: implemented; real HTTP/PostgreSQL, parsed PDF, and
+rendered layout verification passed. STOPPED.** This supersedes historical handoffs.
+Read PROJECT_SPEC.md completely, AGENTS.md, context.md and decisions; initial Git
+status was clean. Preserved existing milestones. No commits/pushes. Milestone 7 has
+not begun. SlotSure remains the JS/React/Vite/Express/pg one-consultant MVP, customer
+accounts, one type, 30 minutes, 14 consultant-local booking dates. No schema migration.
+
+## Implementation and architecture
+
+- New services/confirmation.js: customer-owned PDF lookup and in-memory rendering.
+  Reuses exported bookingId validation from booking-management.js. One parameterized
+  SQL statement fetches current ownership/role, customer name/email, consultant name,
+  booking instant/status/canceled_at, and statement_timestamp as the status check time.
+- GET /api/bookings/:id/confirmation.pdf uses requireUser + requireCustomer. Customer
+  ownership is enforced in SQL, not in the URL or UI. Anonymous 401, consultant 403,
+  malformed bigint 400, and identical foreign/missing 404. Existing JSON error shape.
+- Complete PDF buffer is generated before headers. Success: 200 application/pdf,
+  attachment filename SlotSure-SS-000123.pdf (actual padded booking id), no-store,
+  nosniff, actual Content-Length. No application files/URLs/permanent storage created.
+- PDF contains reference, customer name/email, consultant, local date/time range,
+  IANA zone, 30 minutes, status and status-check timestamp. Canceled documents say
+  CANCELED, show cancellation time, and say they do not reserve a time. Documents
+  explicitly describe snapshot semantics and direct users to My bookings for current
+  status. No schedule lock held for rendering; read snapshot is one statement.
+- Bundled server/assets/fonts/DejaVuSans.ttf (unmodified Poppler runtime font), its
+  official redistribution license and README. Embedded glyphs support tested accented
+  Latin and Greek names. Controls in names/email are rendered as spaces, not markup.
+- New ConfirmationDownload.jsx is reused in success confirmation and every customer
+  dashboard row, including canceled history. Same-origin session fetch, pending/error
+  feedback, duplicate-click guard, abort on unmount/account change, MIME check, blob
+  download and deferred temporary URL revocation. Consultant uses existing dashboard;
+  no consultant PDF route/button added.
+- Dependencies: PDFKit 0.20.2 runtime, PDF.js 6.4.299 dev-only for parsing assertions;
+  root lockfile updated. No frontend PDF generator. Node 22.14 satisfies these packages.
+- Existing booking HTTP suite extended with three PDF cases using its real sessions
+  and disposable PostgreSQL schema. Added confirmation.test.js (two pure PDF tests)
+  and tests/helpers/pdf.js (real parser). No new test schema scaffolding needed.
+
+## Actual commands and verification
+
+- Initial npm install PDFKit failed in sandbox DNS (ENOTFOUND). Approved retry of
+  npm install --workspace server pdfkit --fetch-retries=0 --fetch-timeout=15000 passed:
+  19 packages added, audit 0 vulnerabilities. Dev-only pdfjs-dist install passed:
+  3 packages added, 262 audited, 0 vulnerabilities. No credentials printed.
+- Initial npm test: 9 passed, 2 failed, 4 skipped; initial test:db: 50 passed, 3 failed
+  (two PDF parser subtests plus parent). Cause was test helper calling pdf.destroy,
+  which is not the installed PDF.js proxy API. Inspected installed implementation;
+  changed cleanup to await loadingTask.destroy in finally. No application workaround.
+- Focused node --test server/tests/confirmation.test.js after fix: PASS, 2/2.
+- Final npm test: PASS, 11 passed, 0 failed, 4 explicitly skipped DB integration suites.
+- Final npm run test:db: PASS, 53 tests, 0 failed, 0 skipped, real PostgreSQL 18.1.
+  Verifies actual PDF response MIME/attachment/cache/nosniff/length, parsed identity,
+  date/time/duration/reference/status, owner isolation, anonymous/consultant/invalid-ID
+  rejection, foreign/missing privacy, fresh canceled state, preserved row, and safe
+  JSON on simulated DB failure followed by recovery. All previous race/auth tests pass.
+- npm run lint: PASS. npm run build: PASS, Vite 8.3.5, 22 modules.
+- Generated synthetic confirmed/canceled/max-length canceled PDF QA fixtures using
+  .local/verify-confirmation.mjs; rendered each with bundled Poppler pdftoppm to PNG.
+  Visually inspected all three: one A4 page each, readable text, proper wrapping,
+  no clipping/overlap, clear status and timestamps. PDF.js separately checks one-page
+  layout, full long names/email retention and accented/Greek text extraction.
+- Browser click-to-download attempt: NOT VERIFIED; in-app browser navigation to
+  http://127.0.0.1:5173 failed ERR_CONNECTION_TIMED_OUT, as in previous handoffs.
+  Do not claim the full login/book/download visual journey or a browser screenshot.
+- Final npm run format:check and npm run lint: PASS after documentation updates.
+- git diff --check: PASS (configured LF/CRLF notices only). git check-ignore confirms
+  server/.env and .local PDF fixtures remain ignored; git ls-files lists neither.
+
+## Files changed and local state
+
+New: server/src/services/confirmation.js, server/assets/fonts/{DejaVuSans.ttf,
+LICENSE.txt,README.md}, server/tests/confirmation.test.js, server/tests/helpers/pdf.js,
+client/src/components/ConfirmationDownload.jsx.
+Updated: server/src/app.js, routes/bookings.js, services/booking-management.js,
+server/tests/bookings.test.js, server/package.json, root package-lock.json,
+client/src/components/{BookingConfirmation.jsx,BookingDashboard.jsx}, README.md,
+docs/DECISIONS.md, context.md. Existing server/.env and secrets preserved/ignored.
+QA PDF/PNG/script files remain ignored under .local/pdf-qa and .local; they are test
+artifacts, not a new application storage mechanism. Integration fixtures are removed
+with their isolated test schema. No development booking/account data modified.
+
+## Remaining limitations and next step
+
+No known failing automated checks. Browser click/save UX remains unverified due to
+local browser timeout. A downloaded PDF is a dated snapshot and cannot update after
+later cancellation; every fresh download rechecks stored status. Bundled font is not
+universal; multilingual typesetting/fallback remains outside scope. No persistent
+booking idempotency replay; offset pagination can shift and other tabs need refresh
+(as previously recorded). Not run: Node 24, deployed HTTPS, mobile browser matrix.
+Next: Milestone 7 — Product Quality and UX, only with explicit user instruction.
+Do not begin it or commit/push automatically.
+
+---
+
 # Milestone 5 handoff — 2026-10-22 (Asia/Karachi)
 
 ## Current status and boundaries

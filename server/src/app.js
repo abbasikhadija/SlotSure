@@ -10,6 +10,7 @@ import { providerAvailabilityRouter } from './routes/availability.js';
 import { createBookingService } from './services/bookings.js';
 import { bookingsRouter } from './routes/bookings.js';
 import { createBookingManagement } from './services/booking-management.js';
+import { createConfirmationService } from './services/confirmation.js';
 
 export function createApp({ pool, config, sessionSchema = 'public' }) {
   const app = express();
@@ -90,6 +91,10 @@ export function createApp({ pool, config, sessionSchema = 'public' }) {
     bookingsRouter({
       pool,
       management,
+      confirmation: createConfirmationService({
+        pool,
+        timeZone: config.timeZone ?? 'Asia/Karachi',
+      }),
       service: createBookingService({
         pool,
         timeZone: config.timeZone ?? 'Asia/Karachi',

@@ -227,3 +227,53 @@ to appointment labels so historical dates are unambiguous.
 availability remount resets selections and provider unsaved hours drafts. Other tabs
 need manual refresh. Full visual verification was unavailable (local browser timeout);
 real HTTP/database behavior and the production bundle were verified.
+
+## 2026-10-22 — Milestone 6 PDF confirmation
+
+**Decision:** Add a customer-only GET /api/bookings/:id/confirmation.pdf route using
+current session authentication, shared bigint validation, and a parameterized query
+filtering both booking ID and authenticated owner. Foreign/missing records share 404;
+consultants continue using the management dashboard. Generate the complete PDF buffer
+before setting download headers; preserve the existing safe JSON errors and no-store.
+
+**Problem:** Produce a truthful authorized document without leaking another customer's
+information, keeping permanent files, or trusting stale confirmation-screen state.
+
+**Alternatives:** Stored PDFs, permanent download URLs, browser-generated documents,
+or a long transaction/consultant lock during document generation.
+
+**Reasoning:** One SQL statement reads customer/consultant identity, owner, status and
+statement timestamp consistently. This read does not mutate the schedule, so it does
+not need to hold the schedule lock while rendering. PDFKit creates the small document
+in memory. Canceled PDFs prominently state CANCELED, retain the canceled timestamp,
+and explain that no time is reserved. Every PDF states when status was checked and
+points to My bookings for live status. Regeneration after cancellation is tested.
+
+**Trade-off:** An already downloaded PDF cannot update after a later cancellation.
+Its status is explicitly a snapshot. Buffering uses memory per request, bounded here
+by the small appointment record and existing name/email limits. No migration/storage
+service, notifications, or additional role/endpoint for consultants was introduced.
+
+**Decision:** Use PDFKit 0.20.2 in the backend, bundled DejaVu Sans plus its license,
+and PDF.js 6.4.299 only as a development parser. Use one abortable customer download
+component in confirmation and history; check PDF MIME, trigger a temporary blob download,
+and release the blob URL. All requests use the current same-origin session.
+
+**Problem:** Verify actual PDF structure/content and portable rendering, rather than
+only checking a PDF signature. Prevent stale account requests and duplicate clicks.
+
+**Alternatives:** Built-in Helvetica only, installing fonts on each server, a browser
+print workflow, or superficial byte-prefix tests.
+
+**Reasoning:** Embedded font glyphs render the tested accented Latin/Greek names on
+any host. PDF.js parses actual HTTP bodies to verify fields, status, headers and access
+control. Poppler renders confirmed/canceled/max-length fixtures for visual inspection.
+Official references: [PDFKit text/fonts](https://pdfkit.org/docs/text.html),
+[PDFKit document streams](https://pdfkit.org/docs/getting_started.html), and
+[PDF.js examples](https://mozilla.github.io/pdf.js/examples/). Installed APIs and
+Node 22.14 compatibility were verified in tests. PDF.js cleanup uses its loading task.
+
+**Trade-off:** Bundled font increases repository size; it does not cover every writing
+system. No multilingual/font-fallback system was added. Browser click-to-save remains
+unverified because the local in-app browser could not connect to Vite; document content,
+real HTTP access, and rendered layout were verified independently.

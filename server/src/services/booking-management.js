@@ -3,7 +3,7 @@ import { withScheduleLock } from '../db/schedule-transaction.js';
 import { HttpError } from '../http-error.js';
 import { SLOT_MINUTES } from './slots.js';
 
-function bookingId(value) {
+export function bookingId(value) {
   if (
     typeof value !== 'string' ||
     !/^[1-9]\d{0,18}$/.test(value) ||

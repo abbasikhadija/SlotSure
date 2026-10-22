@@ -12,6 +12,7 @@ import { createBookingService } from '../src/services/bookings.js';
 import { createBookingManagement } from '../src/services/booking-management.js';
 import { createApp } from '../src/app.js';
 import { readAuthConfig } from '../src/config.js';
+import { inspectPdf } from './helpers/pdf.js';
 
 test(
   'booking correctness and authenticated HTTP races with real PostgreSQL',
@@ -908,6 +909,121 @@ test(
             );
           }
           assert.equal((await cancel(first, id)).status, 200);
+        },
+      );
+      const pdfId = await insertBooking(firstId, managementStart(16));
+      const pdfResponse = (account, id = pdfId) =>
+        fetch(`${base}/api/bookings/${id}/confirmation.pdf`, {
+          headers: { Cookie: account?.cookie ?? '' },
+        });
+      await t.test(
+        'owner PDF HTTP response has correct download/security headers and parsed booking fields',
+        async () => {
+          const response = await pdfResponse(first);
+          assert.equal(response.status, 200);
+          assert.equal(response.headers.get('content-type'), 'application/pdf');
+          assert.equal(response.headers.get('cache-control'), 'no-store');
+          assert.equal(
+            response.headers.get('x-content-type-options'),
+            'nosniff',
+          );
+          assert.equal(
+            response.headers.get('content-disposition'),
+            `attachment; filename="SlotSure-SS-${pdfId.padStart(6, '0')}.pdf"`,
+          );
+          const buffer = Buffer.from(await response.arrayBuffer());
+          assert.equal(
+            Number(response.headers.get('content-length')),
+            buffer.length,
+          );
+          const { pages, text } = await inspectPdf(buffer);
+          assert.equal(pages, 1);
+          for (const value of [
+            `SS-${pdfId.padStart(6, '0')}`,
+            'Demo Customer',
+            'first@example.test',
+            'Demo Consultant',
+            '16:00',
+            '16:30',
+            '30 minutes',
+            'Asia/Karachi',
+            'Status: CONFIRMED',
+          ])
+            assert.ok(
+              text.includes(value),
+              `Missing download content: ${value}`,
+            );
+          assert.ok(!text.includes('second@example.test'));
+        },
+      );
+      await t.test(
+        'PDF rejects anonymous, foreign customer, consultant, malformed and missing IDs as safe JSON',
+        async () => {
+          for (const [account, id, status] of [
+            [null, pdfId, 401],
+            [second, pdfId, 404],
+            [consultant, pdfId, 403],
+            [first, '0', 400],
+            [first, 'abc', 400],
+            [first, '9223372036854775808', 400],
+            [first, '9223372036854775807', 404],
+          ]) {
+            const response = await pdfResponse(account, id);
+            assert.equal(response.status, status);
+            assert.match(
+              response.headers.get('content-type'),
+              /application\/json/,
+            );
+            assert.equal(response.headers.get('content-disposition'), null);
+            const data = await response.json();
+            assert.ok(data.error.code);
+            assert.ok(!JSON.stringify(data).includes('first@example.test'));
+          }
+          const foreign = await pdfResponse(second);
+          const missing = await pdfResponse(second, '9223372036854775807');
+          assert.deepEqual(await foreign.json(), await missing.json());
+        },
+      );
+      await t.test(
+        'PDF is regenerated from current canceled state and database failures remain JSON',
+        async () => {
+          assert.equal((await cancel(first, pdfId)).status, 200);
+          const response = await pdfResponse(first);
+          assert.equal(response.status, 200);
+          const { text } = await inspectPdf(
+            Buffer.from(await response.arrayBuffer()),
+          );
+          assert.ok(text.includes('Status: CANCELED'));
+          assert.ok(text.includes('does not reserve a time'));
+          assert.ok(text.includes('CANCELED AT'));
+          assert.ok(!text.includes('CONFIRMED'));
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT count(*)::int AS n FROM bookings WHERE id=$1',
+                [pdfId],
+              )
+            ).rows[0].n,
+            1,
+          );
+          await pool.query(
+            'ALTER TABLE bookings RENAME TO test_hidden_bookings',
+          );
+          try {
+            const failed = await pdfResponse(first);
+            assert.equal(failed.status, 500);
+            assert.match(
+              failed.headers.get('content-type'),
+              /application\/json/,
+            );
+            assert.equal(failed.headers.get('content-disposition'), null);
+            assert.equal((await failed.json()).error.code, 'INTERNAL_ERROR');
+          } finally {
+            await pool.query(
+              'ALTER TABLE test_hidden_bookings RENAME TO bookings',
+            );
+          }
+          assert.equal((await pdfResponse(first)).status, 200);
         },
       );
     } finally {

@@ -2,6 +2,31 @@
 
 Book your time. No clashes, no confusion.
 
+## Milestone 6 PDF confirmation
+
+Customers can choose **Download PDF** on the booking confirmation screen or any
+entry in My bookings, including canceled history. Downloads use the current session
+and show pending/error feedback. Consultants inspect appointments in their dashboard;
+the PDF endpoint is customer-only.
+
+GET `/api/bookings/:id/confirmation.pdf` returns an attachment named
+`SlotSure-SS-000123.pdf` (using the booking's actual reference), with content type
+application/pdf, Cache-Control: no-store, and X-Content-Type-Options: nosniff.
+Unauthenticated requests return 401, consultants 403, malformed IDs 400, and foreign
+or missing bookings the same 404 JSON. Errors are returned as JSON before PDF headers.
+
+The PDF includes booking reference, customer name/email, consultant, local date and
+time range, time zone, 30-minute duration, status, and a status-check timestamp.
+Canceled bookings say **CANCELED**, include their cancellation timestamp, and explain
+that the record does not reserve a time. It is an explicitly dated snapshot; a saved
+PDF cannot reflect a later cancellation. My bookings remains the current status view.
+
+PDFKit generates a complete buffer on demand from one authorized database snapshot.
+No PDF files, URLs, or storage service are persisted by the application. A licensed
+DejaVu Sans font is bundled for portable rendering; full multilingual font fallback
+is outside the MVP. PDF.js is a development-only dependency for parsing response content
+in tests. The backend runtime does not import it.
+
 ## Milestone 5 booking management
 
 Signed-in customers have **My bookings**; consultants have **Consultant appointments**.
@@ -28,7 +53,7 @@ Canceled times reappear only when current hours, blocks, and other bookings perm
 The UI refreshes bookings and availability after cancellation; successful booking
 refreshes the dashboard. An account change aborts old dashboard requests.
 
-Reloaded bookings can now be found in the dashboard. PDFs remain Milestone 6.
+Reloaded bookings can now be found in the dashboard, with PDFs available above.
 
 ## Milestone 4 booking workflow
 
@@ -43,8 +68,7 @@ The server derives ownership, validates after acquiring the consultant lock, ins
 inside the transaction, and returns 201 only after commit. The `booking` response has
 id, reference, consultantName, startsAt, endsAt, durationMinutes, timeZone, and status.
 Invalid input returns 400; authentication/role failures return 401/403; occupied times
-return 409. Booking reads and cancellation are available as described above; PDF
-endpoints remain a later milestone.
+return 409. Booking reads, cancellation, and PDFs are available as described above.
 
 Confirmation is held in page memory; reload loses the displayed confirmation but
 retains the reservation. Keep the reference. On uncertain network/server failure, the
@@ -56,7 +80,7 @@ SlotSure will help independent consultants and their customers replace manual sc
 
 ## Current status
 
-Milestone 5 booking management is implemented: customers review their own appointments and cancel future bookings; consultants review and cancel future customer bookings. Canceled history is preserved. Booking, availability management, authentication, and PostgreSQL sessions remain available. PDFs are the next milestone.
+Milestone 6 PDF confirmation and booking management are implemented: customers review their own appointments and cancel future bookings; consultants review and cancel future customer bookings. Canceled history is preserved. Booking, availability management, authentication, and PostgreSQL sessions remain available. Authorized customer PDFs include current confirmed/canceled status. Product quality and UX are the next milestone.
 
 Read [PROJECT_SPEC.md](PROJECT_SPEC.md) for requirements and [context.md](context.md) for the verified handoff.
 
@@ -147,9 +171,9 @@ Migrations implement users, weekly hours, blocked slots, bookings, and PostgreSQ
 
 ## Limitations
 
-No PDFs, deployment, or distributed default demo credentials exist yet. Authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No deployment link is available.
+No deployment or distributed default demo credentials exist yet. Authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No deployment link is available.
 
-See [engineering decisions](docs/DECISIONS.md). Milestone 6 requires explicit authorization.
+See [engineering decisions](docs/DECISIONS.md). Milestone 7 requires explicit authorization.
 
 ## Milestone 1 database setup
 

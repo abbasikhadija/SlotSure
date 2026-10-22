@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { appointmentLabel } from '../lib/schedule.js';
+import { ConfirmationDownload } from './ConfirmationDownload.jsx';
 
 export function BookingDashboard({ consultant = false, revision, onChanged }) {
   const [view, setView] = useState('upcoming');
@@ -171,6 +172,9 @@ export function BookingDashboard({ consultant = false, revision, onChanged }) {
                         ? 'Canceling…'
                         : 'Cancel appointment'}
                     </button>
+                  )}
+                  {!consultant && (
+                    <ConfirmationDownload bookingId={booking.id} />
                   )}
                 </li>
               ))}

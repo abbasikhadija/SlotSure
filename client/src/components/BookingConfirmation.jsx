@@ -1,4 +1,5 @@
 import { slotLabel } from '../lib/schedule.js';
+import { ConfirmationDownload } from './ConfirmationDownload.jsx';
 
 export function BookingConfirmation({ booking, onChooseAnother }) {
   const date = new Intl.DateTimeFormat('en-GB', {
@@ -62,6 +63,7 @@ export function BookingConfirmation({ booking, onChooseAnother }) {
           </dd>
         </div>
       </dl>
+      <ConfirmationDownload bookingId={booking.id} />
       <button type="button" className="text-button" onClick={onChooseAnother}>
         Choose another appointment
       </button>
