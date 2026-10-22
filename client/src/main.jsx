@@ -15,6 +15,7 @@ function App() {
   const [error, setError] = useState('');
   const [bookingRevision, setBookingRevision] = useState(0);
   const [scheduleRevision, setScheduleRevision] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -49,6 +50,7 @@ function App() {
         body: values,
       });
       form.reset();
+      setShowPassword(false);
       if (view === 'register') {
         setView('login');
         setMessage('Your account is ready. Sign in to continue.');
@@ -69,6 +71,7 @@ function App() {
     try {
       await api('/api/auth/logout', { method: 'POST', body: {} });
       setUser(null);
+      setShowPassword(false);
       setView('login');
       setMessage('You have been signed out.');
     } catch (error) {
@@ -79,12 +82,25 @@ function App() {
   }
 
   return (
-    <main>
+    <main id="content" tabIndex={-1}>
+      <a className="skip-link" href="#schedule">
+        Skip to appointments
+      </a>
       <header>
         <a href="/" aria-label="SlotSure home">
           SlotSure<span>✳</span>
         </a>
-        <span>Consultations, made simple</span>
+        <nav aria-label="Main navigation">
+          <a href="#schedule">
+            {user?.role === 'consultant' ? 'Availability' : 'Book a time'}
+          </a>
+          {user && (
+            <a href="#bookings">
+              {user.role === 'consultant' ? 'Appointments' : 'My bookings'}
+            </a>
+          )}
+          <a href="#account">{user ? 'Account' : 'Sign in'}</a>
+        </nav>
       </header>
       <div className="account-layout">
         <section className="hero">
@@ -102,9 +118,20 @@ function App() {
             A simpler way for independent consultants and their customers to
             make time for what matters.
           </p>
+          <a className="button-link" href="#schedule">
+            {user?.role === 'consultant'
+              ? 'Manage availability'
+              : 'Find a consultation'}
+          </a>
+          <p className="note">
+            One consultation. 30 minutes. Times shown in your consultant’s time
+            zone.
+          </p>
         </section>
         <section
           className="account-card"
+          id="account"
+          tabIndex={-1}
           aria-labelledby="account-title"
           aria-busy={loading || busy}
         >
@@ -138,7 +165,11 @@ function App() {
                   ? 'A little less back-and-forth starts here.'
                   : 'Sign in to your SlotSure account.'}
               </p>
-              <form key={view} onSubmit={submit}>
+              <form
+                key={view}
+                onSubmit={submit}
+                aria-label={view === 'register' ? 'Create account' : 'Sign in'}
+              >
                 {view === 'register' && (
                   <label>
                     Your name
@@ -156,6 +187,9 @@ function App() {
                   <input
                     name="email"
                     type="email"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     autoComplete="email"
                     required
                     maxLength={254}
@@ -166,7 +200,7 @@ function App() {
                   Password
                   <input
                     name="password"
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     autoComplete={
                       view === 'register' ? 'new-password' : 'current-password'
                     }
@@ -178,6 +212,15 @@ function App() {
                       view === 'register' ? 'password-help' : undefined
                     }
                   />
+                </label>
+                <label className="day-toggle password-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showPassword}
+                    onChange={(event) => setShowPassword(event.target.checked)}
+                    disabled={busy}
+                  />
+                  Show password
                 </label>
                 {view === 'register' && (
                   <p className="note" id="password-help">
@@ -202,6 +245,7 @@ function App() {
                   disabled={busy}
                   onClick={() => {
                     setView(view === 'register' ? 'login' : 'register');
+                    setShowPassword(false);
                     setMessage('');
                     setError('');
                   }}
@@ -223,16 +267,21 @@ function App() {
           )}
         </section>
       </div>
-      {!loading &&
-        (user?.role === 'consultant' ? (
-          <ConsultantAvailability key={`${user.id}-${scheduleRevision}`} />
-        ) : (
-          <SlotPicker
-            key={`${user?.id ?? 'visitor'}-${scheduleRevision}`}
-            customer={user?.role === 'customer'}
-            onBooked={() => setBookingRevision((value) => value + 1)}
-          />
-        ))}
+      <div id="schedule" tabIndex={-1}>
+        {!loading &&
+          (user?.role === 'consultant' ? (
+            <ConsultantAvailability
+              key={user.id}
+              refreshRevision={scheduleRevision}
+            />
+          ) : (
+            <SlotPicker
+              key={`${user?.id ?? 'visitor'}-${scheduleRevision}`}
+              customer={user?.role === 'customer'}
+              onBooked={() => setBookingRevision((value) => value + 1)}
+            />
+          ))}
+      </div>
       {user && (
         <BookingDashboard
           key={user.id}

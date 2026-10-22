@@ -28,7 +28,7 @@ const draftHours = (hours) =>
     };
   });
 
-export function ConsultantAvailability() {
+export function ConsultantAvailability({ refreshRevision = 0 }) {
   const [hours, setHours] = useState(null);
   const [draft, setDraft] = useState([]);
   const [blocks, setBlocks] = useState([]);
@@ -37,9 +37,12 @@ export function ConsultantAvailability() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [revision, setRevision] = useState(0);
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
+      setLoading(true);
+      setError('');
       try {
         const [hours, blocks] = await Promise.all([
           api('/api/provider/hours', { signal: controller.signal }),
@@ -47,7 +50,9 @@ export function ConsultantAvailability() {
         ]);
         if (!controller.signal.aborted) {
           setHours(hours);
-          setDraft(draftHours(hours.hours));
+          setDraft((current) =>
+            current.length ? current : draftHours(hours.hours),
+          );
           setBlocks(blocks.blocks);
           setLoading(false);
         }
@@ -60,7 +65,7 @@ export function ConsultantAvailability() {
     }
     load();
     return () => controller.abort();
-  }, []);
+  }, [refreshRevision, retry]);
 
   function change(index, key, value) {
     setDraft((rules) =>
@@ -78,6 +83,16 @@ export function ConsultantAvailability() {
   async function save(event) {
     event.preventDefault();
     if (busy) return;
+    const invalid = draft.find(
+      (rule) => rule.enabled && rule.startTime >= rule.endTime,
+    );
+    if (invalid) {
+      setError(
+        `${weekdays[invalid.weekday - 1]} needs an end time after its start time.`,
+      );
+      document.getElementById(`hours-end-${invalid.weekday}`)?.focus();
+      return;
+    }
     setBusy(true);
     setError('');
     setMessage('');
@@ -171,6 +186,10 @@ export function ConsultantAvailability() {
                       End
                       <select
                         aria-label={`${weekdays[index]} end`}
+                        id={`hours-end-${rule.weekday}`}
+                        aria-invalid={
+                          rule.enabled && rule.startTime >= rule.endTime
+                        }
                         value={rule.endTime}
                         disabled={!rule.enabled}
                         onChange={(event) =>
@@ -209,7 +228,21 @@ export function ConsultantAvailability() {
           </p>
         )}
       </section>
-      <SlotPicker key={revision} consultant onBlocked={refreshBlocks} />
+      {error && (
+        <button
+          type="button"
+          className="text-button"
+          disabled={busy || loading}
+          onClick={() => setRetry((value) => value + 1)}
+        >
+          Retry loading schedule
+        </button>
+      )}
+      <SlotPicker
+        key={`${revision}-${refreshRevision}`}
+        consultant
+        onBlocked={refreshBlocks}
+      />
       <section className="schedule-card" aria-labelledby="blocks-title">
         <h2 id="blocks-title">Blocked appointments</h2>
         <p className="note">
@@ -218,6 +251,11 @@ export function ConsultantAvailability() {
         </p>
         {loading ? (
           <p role="status">Loading blocks…</p>
+        ) : !hours ? (
+          <p className="note">
+            Your blocked appointments could not be loaded. Retry loading your
+            schedule.
+          </p>
         ) : blocks.length ? (
           <ul className="block-list">
             {blocks.map((block) => (

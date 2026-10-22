@@ -1,3 +1,107 @@
+# Milestone 7 handoff — 2026-10-22 (Asia/Karachi)
+
+## Current status and boundaries
+
+**Milestone 7 — Product Quality and UX: implemented and verified. STOPPED.** This
+supersedes historical handoffs below, including their browser-connectivity limits.
+Read PROJECT_SPEC.md completely, AGENTS.md, context.md and decisions; initial Git
+status was clean. Preserved existing features and backend. No commits/pushes.
+Milestone 8 has not begun. Same one-consultant, customers, one consultation type,
+30-minute/14-date JS/React/Vite/Express/PostgreSQL MVP. No dependencies, migrations,
+API contracts or backend application code changed in this milestone.
+
+## Implemented changes
+
+- Role-aware header links, primary hero action, keyboard skip link and stable fragment
+  targets for account, schedule and bookings. No router/new page infrastructure.
+- Responsive slot grid, wrapping navigation, mobile spacing, 44px controls, focus
+  styles, explicit confirmed/canceled status badges, and password visibility toggle.
+- Email keyboard hints and local hours validation (end must follow start), invalid
+  field focus and aria-invalid. Server remains authoritative for all business rules.
+- Availability loading failures separated from action feedback. Conflict no longer
+  hides valid refreshed slots behind its error banner; selection clears and alternatives
+  remain actionable. Uncertain outcomes now point to My bookings instead of retrying.
+- Provider block mutations have synchronous duplicate guard and abort-on-unmount.
+  Errors clear selection and refresh times. Read failures expose a clear retry path.
+- Cancellation inline confirmation: Yes/Keep controls; focus enters confirmation,
+  returns to trigger on Keep, and moves to dashboard heading after cancellation.
+- ConsultantAvailability keeps its account key and accepts a refreshRevision prop.
+  Refreshed metadata/blocks no longer overwrite the hours draft. Picker still resets
+  after cancellation; unsaved provider edits survive. Schedule load has a retry button.
+- API helper and PDF download normalize network/parser failures for users while keeping
+  HTTP error status and aborts. Errors retain original cause for diagnostics. No mutation
+  proceeds after failed CSRF preparation; no automatic retry POST added.
+- Three focused client-request tests added in server/tests/client-api.test.js; no
+  database mocks substitute for PostgreSQL. docs/UX_REVIEW.md records executed journeys.
+
+## Actual verification
+
+- npm test: PASS, 14 passed, 0 failed, 4 database suites explicitly skipped.
+- npm run test:db: PASS, 53 tests, 0 failed, 0 skipped using real PostgreSQL 18.1.
+  Existing schema/auth/availability/booking/cancellation races and PDF access retained.
+- Intermediate npm run lint: FAILED (two preserve-caught-error errors in friendly error
+  wrappers). Added original error as cause. Final lint PASS; focused client API tests
+  rerun afterward: 3 passed, 0 failed. No source workaround or weakened security.
+- npm run build: PASS after final source fix; Vite 8.3.5, 22 modules.
+- Actual in-app browser connected after restarting verified stale SlotSure listeners
+  outside sandbox isolation. No firewall or other security protection was changed.
+  Backend/Vite started hidden with logs under ignored .local; loopback ports 3000/5173.
+- Browser customer journey: registration, password visibility, invalid/correct login,
+  empty states, date/time selection, real stale-availability 409 caused by independent
+  authenticated consultant block, direct recovery to 09:30, booking confirmation,
+  PDF download, cancellation Keep/Yes, history and canceled PDF, and rebooking all PASS.
+- Browser consultant journey: login, invalid hours alert/focus then save original hours,
+  unblock/block/unblock, dashboard cancellation while Monday had an unsaved edit;
+  draft stayed checked after refresh. Restored unchecked Monday; saved Thursday-only
+  hours. Booking history persisted, blocks cleared, both Thursday slots returned.
+- Parsed actual browser Downloads/SlotSure-SS-000001.pdf and its canceled (1) version
+  using existing PDF.js helper: CONFIRMED and CANCELED respectively; canceled PDF
+  contains no CONFIRMED status. Existing on-demand PDF implementation unchanged.
+- Browser keyboard: Shift+Tab reaches visible skip link, Enter focuses schedule.
+  Keep returns to cancel trigger; successful cancellation focuses dashboard heading.
+  DOM checks found no missing input/select labels or broken fragment links.
+- Viewports: 320, 390, 820, 1280px; no horizontal overflow. Actual mobile customer
+  controls, provider forms and desktop confirmation visually inspected. Temporary
+  viewport override reset, browser signed out at end. No exhaustive WCAG claim.
+- Intentional API outage: friendly read failure and enabled retry shown; restored API,
+  retried without reload, alert cleared and availability returned. API restored afterward.
+- Final npm run format:check and npm run lint: PASS after documentation updates.
+- git diff --check: PASS, with configured LF/CRLF notices only. git check-ignore
+  confirms server/.env, QA credentials and screenshots remain ignored; git ls-files
+  lists no server/.env or .local paths.
+
+## Files and local state
+
+Modified: client/src/main.jsx, styles.css, components/{SlotPicker.jsx,
+ConsultantAvailability.jsx,BookingDashboard.jsx,ConfirmationDownload.jsx}, lib/api.js;
+README.md, docs/DECISIONS.md, context.md. New: server/tests/client-api.test.js,
+docs/UX_REVIEW.md. Dependencies and backend application/schema remain unchanged.
+
+Browser fixtures are synthetic only. One QA customer remains; credentials in ignored
+.local/m7-browser.env. Two browser-created bookings (SS-000001 and SS-000002) remain
+canceled for history. Final development counts: 0 confirmed, 0 blocks, 2 canceled,
+1 new QA customer. Original Thursday 09:00–10:00 hours preserved; existing accounts
+not deleted. Original temp conflict block removed through provider UI. Ignored QA
+scripts and screenshots under .local/m7-*. Actual downloads remain in Downloads.
+Final screenshots include .local/m7-desktop.png, m7-desktop-confirmation.png,
+m7-mobile-conflict.png and m7-mobile-confirmation.png. No secrets printed/tracked.
+API restored as owned PID 24400, Vite PID 11824; PostgreSQL port 55432. Process IDs
+are session observations, not stable setup configuration. See README for start commands.
+
+## Remaining limits and next step
+
+No known failing checks or Milestone 7 blocker. Essential local browser journeys now
+verified; historical browser-timeout limitations are superseded. Other tabs still need
+manual refresh; offset pagination can shift. Retained provider draft is not overwritten
+by another tab's hours update; reload to discard it. Cancellation resets selected time
+but preserves draft. PDFs remain snapshots and font coverage is finite. No persistent
+booking idempotency replay. Not run: physical mobile devices, screen-reader matrix,
+full WCAG audit, Node 24 or deployed HTTPS. No deployment/final delivery work attempted.
+Next: Milestone 8 — Final Engineering Verification and Delivery, only when authorized.
+Do not begin it or commit/push automatically.
+
+---
+
 # Milestone 6 handoff — 2026-10-22 (Asia/Karachi)
 
 ## Current status and boundaries

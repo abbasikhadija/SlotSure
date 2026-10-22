@@ -47,12 +47,13 @@
   max-width: 320px;
 }
 .slot-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
   gap: 10px;
   margin: 24px 0;
 }
 .slot-button {
+  padding: 12px 8px;
   background: #edf1e5;
   color: #123b36;
   border: 1px solid #c6d1ba;
@@ -161,14 +162,14 @@ header {
   align-items: center;
   gap: 20px;
 }
-header a {
+header > a {
   color: inherit;
   text-decoration: none;
   font-size: 28px;
   font-weight: 750;
   letter-spacing: -1px;
 }
-header a span {
+header > a span {
   color: #758b34;
   margin-left: 5px;
 }
@@ -231,6 +232,7 @@ input {
   background: #fff;
 }
 button {
+  min-height: 44px;
   border: 0;
   border-radius: 7px;
   padding: 13px 20px;
@@ -245,7 +247,7 @@ button:hover {
   background: #24564b;
 }
 button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.65;
 }
 button:focus-visible,
@@ -255,7 +257,7 @@ a:focus-visible {
   outline-offset: 3px;
 }
 .text-button {
-  padding: 3px 0;
+  padding: 10px 4px;
   color: #123b36;
   background: transparent;
   text-decoration: underline;
@@ -386,4 +388,137 @@ footer {
 }
 .booking-list h3 {
   margin: 0 0 0.5rem;
+}
+
+html {
+  scroll-padding-top: 24px;
+}
+a {
+  color: #24564b;
+  text-underline-offset: 3px;
+}
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 20px;
+}
+nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 13px 20px;
+  border-radius: 7px;
+  color: white;
+  background: #123b36;
+  font-weight: 650;
+  text-decoration: none;
+}
+.button-link:hover {
+  background: #24564b;
+}
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  padding: 12px;
+  background: white;
+  transform: translateY(-160%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+.password-toggle {
+  min-height: 44px;
+  font-weight: 400;
+}
+.password-toggle input {
+  width: 20px;
+  height: 20px;
+}
+.booking-list li {
+  padding: 24px 0;
+}
+.booking-status {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.booking-status.confirmed {
+  color: #365018;
+  background: #eaf0df;
+}
+.booking-status.canceled {
+  color: #843b29;
+  background: #fae9e4;
+}
+.cancel-prompt {
+  padding: 16px;
+  margin: 16px 0;
+  border: 1px solid #d8b3a7;
+  border-radius: 8px;
+  background: #fff7f3;
+}
+.cancel-prompt p {
+  margin-top: 0;
+  line-height: 1.6;
+}
+.danger-button {
+  background: #843b29;
+}
+.danger-button:hover {
+  background: #692c1d;
+}
+.confirmation-download {
+  display: inline-block;
+  margin: 8px 16px 8px 0;
+}
+input,
+select {
+  min-height: 44px;
+}
+:target {
+  scroll-margin-top: 24px;
+}
+@media (max-width: 600px) {
+  main {
+    padding: 20px 16px;
+  }
+  header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  nav {
+    gap: 4px 16px;
+    justify-content: flex-start;
+  }
+  .account-layout {
+    padding: 36px 0;
+  }
+  .account-card {
+    padding: 24px 20px;
+    min-width: 0;
+  }
+  .block-list li {
+    flex-wrap: wrap;
+  }
+  .booking-controls {
+    gap: 8px;
+  }
+  .booking-controls button {
+    flex-grow: 1;
+  }
+  .hours-row select {
+    padding-inline: 4px;
+  }
 }

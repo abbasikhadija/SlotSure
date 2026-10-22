@@ -277,3 +277,46 @@ Node 22.14 compatibility were verified in tests. PDF.js cleanup uses its loading
 system. No multilingual/font-fallback system was added. Browser click-to-save remains
 unverified because the local in-app browser could not connect to Vite; document content,
 real HTTP access, and rendered layout were verified independently.
+
+## 2026-10-22 — Milestone 7 product quality and UX
+
+**Decision:** Keep the existing page/components and visual identity. Add role-aware
+fragment navigation, a keyboard skip link, responsive time buttons, 44px controls,
+password visibility and local hours validation. Use an inline cancellation prompt
+with deliberate focus transitions, and text plus color for booking status.
+
+**Problem:** The implemented features needed clear navigation, mobile/keyboard
+operation, understandable forms, and protection against accidental cancellation.
+
+**Alternatives:** A router, calendar/UI dependency, modal framework, or visual redesign.
+
+**Reasoning:** Native controls, CSS and React state solve the actual interactions.
+Server validation remains authoritative. Browser journeys verified desktop and mobile
+operation, cancellation confirmation/focus, registration/login, and PDF downloads.
+
+**Trade-off:** This is a focused basic-accessibility review, not full WCAG or physical
+mobile certification. No dependency, backend contract, schema or MVP scope change.
+
+**Decision:** Separate availability read failures from action feedback; keep refreshed
+slots visible alongside conflicts. Direct uncertain booking outcomes to My bookings.
+Refresh the consultant's metadata without discarding the existing hours draft. Retain
+HTTP status/abort semantics when normalizing network and malformed-response messages.
+
+**Problem:** A 409 banner previously hid the newly refreshed choices. Cancellation
+remounted the provider editor and lost unsaved changes. Raw network/parser diagnostics
+were unhelpful to users.
+
+**Alternatives:** Remount everything, clear all messages during refresh, or introduce
+a shared state store and a generic request framework.
+
+**Reasoning:** Separate small state values and a revision prop address these specific
+failures. Abort replaced reads and submissions; preserve duplicate-submission guards.
+The real browser verified a stale selected slot followed by consultant block, direct
+recovery to another time, unsaved draft survival, and recovery after an API outage.
+Three focused client-request tests cover statuses, malformed/network responses, CSRF
+preparation and aborts. All 53 real PostgreSQL regression tests remain passing.
+
+**Trade-off:** Refresh retains a provider draft, so another tab's schedule edit does
+not replace that draft; reload intentionally reloads saved hours. Other tabs still
+require refresh. Cancellation resets the time picker to today but leaves the hours
+editor intact. Detailed results and limits are recorded in docs/UX_REVIEW.md.

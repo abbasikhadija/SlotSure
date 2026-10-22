@@ -2,6 +2,19 @@
 
 Book your time. No clashes, no confusion.
 
+## Milestone 7 product quality
+
+The interface now has role-aware navigation, a keyboard skip link, responsive time
+buttons, mobile controls, password visibility, and working-hours validation. Booking
+conflicts keep freshly available alternatives visible. Cancellation asks for an inline
+confirmation and preserves unsaved consultant hours during the resulting refresh.
+Connection failures provide a retry path, and uncertain booking outcomes link to My
+bookings. All business rules and authorization remain enforced by the backend.
+
+Actual customer and consultant browser journeys, including PDF downloads, passed at
+desktop and mobile viewport widths. See [the UX review](docs/UX_REVIEW.md) for executed
+checks, fixtures, evidence, and limits. This is not a comprehensive accessibility audit.
+
 ## Milestone 6 PDF confirmation
 
 Customers can choose **Download PDF** on the booking confirmation screen or any
@@ -80,7 +93,7 @@ SlotSure will help independent consultants and their customers replace manual sc
 
 ## Current status
 
-Milestone 6 PDF confirmation and booking management are implemented: customers review their own appointments and cancel future bookings; consultants review and cancel future customer bookings. Canceled history is preserved. Booking, availability management, authentication, and PostgreSQL sessions remain available. Authorized customer PDFs include current confirmed/canceled status. Product quality and UX are the next milestone.
+Milestone 6 PDF confirmation and booking management are implemented: customers review their own appointments and cancel future bookings; consultants review and cancel future customer bookings. Canceled history is preserved. Booking, availability management, authentication, and PostgreSQL sessions remain available. Authorized customer PDFs include current confirmed/canceled status. Milestone 7 product quality and browser journeys are verified; final engineering verification and delivery are next.
 
 Read [PROJECT_SPEC.md](PROJECT_SPEC.md) for requirements and [context.md](context.md) for the verified handoff.
 
@@ -173,7 +186,7 @@ Migrations implement users, weekly hours, blocked slots, bookings, and PostgreSQ
 
 No deployment or distributed default demo credentials exist yet. Authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No deployment link is available.
 
-See [engineering decisions](docs/DECISIONS.md). Milestone 7 requires explicit authorization.
+See [engineering decisions](docs/DECISIONS.md). Milestone 8 requires explicit authorization.
 
 ## Milestone 1 database setup
 

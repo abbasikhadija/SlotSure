@@ -12,6 +12,12 @@ export function BookingDashboard({ consultant = false, revision, onChanged }) {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [cancelCandidate, setCancelCandidate] = useState('');
+  const heading = useRef(null);
+  const cancellationAction = useRef(null);
+  useEffect(() => {
+    if (cancelCandidate) cancellationAction.current?.focus();
+  }, [cancelCandidate]);
   const submission = useRef(null);
   useEffect(() => () => submission.current?.abort(), []);
   useEffect(() => {
@@ -63,10 +69,12 @@ export function BookingDashboard({ consultant = false, revision, onChanged }) {
         );
     } finally {
       if (!controller.signal.aborted) {
+        setCancelCandidate('');
         setBusy('');
         setPage(1);
         setRefresh((value) => value + 1);
         onChanged();
+        heading.current?.focus();
       }
       submission.current = null;
     }
@@ -74,11 +82,13 @@ export function BookingDashboard({ consultant = false, revision, onChanged }) {
   return (
     <section
       className="schedule-card"
+      id="bookings"
+      tabIndex={-1}
       aria-labelledby="bookings-title"
       aria-busy={loading || Boolean(busy)}
     >
       <p className="eyebrow">YOUR APPOINTMENTS</p>
-      <h2 id="bookings-title">
+      <h2 id="bookings-title" ref={heading} tabIndex={-1}>
         {consultant ? 'Consultant appointments' : 'My bookings'}
       </h2>
       <p className="note">
@@ -98,6 +108,7 @@ export function BookingDashboard({ consultant = false, revision, onChanged }) {
               setPage(1);
               setError('');
               setMessage('');
+              setCancelCandidate('');
             }}
           >
             {option === 'upcoming' ? 'Upcoming' : 'History'}
@@ -147,7 +158,11 @@ export function BookingDashboard({ consultant = false, revision, onChanged }) {
                   </h3>
                   <p>
                     {booking.reference} ·{' '}
-                    {booking.status === 'confirmed' ? 'Confirmed' : 'Canceled'}{' '}
+                    <span className={`booking-status ${booking.status}`}>
+                      {booking.status === 'confirmed'
+                        ? 'Confirmed'
+                        : 'Canceled'}
+                    </span>{' '}
                     · {booking.durationMinutes} minutes
                   </p>
                   <p>
@@ -161,17 +176,59 @@ export function BookingDashboard({ consultant = false, revision, onChanged }) {
                       {appointmentLabel(booking.canceledAt, booking.timeZone)}
                     </p>
                   )}
-                  {booking.canCancel && (
+                  {booking.canCancel && cancelCandidate !== booking.id && (
                     <button
+                      id={`cancel-${booking.id}`}
                       type="button"
                       disabled={Boolean(busy)}
-                      onClick={() => cancel(booking)}
+                      onClick={() => setCancelCandidate(booking.id)}
                       aria-label={`Cancel booking ${booking.reference}`}
                     >
                       {busy === booking.id
                         ? 'Canceling…'
                         : 'Cancel appointment'}
                     </button>
+                  )}
+                  {booking.canCancel && cancelCandidate === booking.id && (
+                    <div
+                      className="cancel-prompt"
+                      role="group"
+                      aria-label={`Confirm cancellation of ${booking.reference}`}
+                    >
+                      <p>
+                        Cancel {booking.reference} on{' '}
+                        {appointmentLabel(booking.startsAt, booking.timeZone)}?
+                        Your record will stay in history.
+                      </p>
+                      <div className="booking-controls">
+                        <button
+                          type="button"
+                          className="danger-button"
+                          ref={cancellationAction}
+                          disabled={Boolean(busy)}
+                          onClick={() => cancel(booking)}
+                        >
+                          {busy === booking.id
+                            ? 'Canceling…'
+                            : 'Yes, cancel appointment'}
+                        </button>
+                        <button
+                          type="button"
+                          className="text-button"
+                          disabled={Boolean(busy)}
+                          onClick={() => {
+                            setCancelCandidate('');
+                            requestAnimationFrame(() =>
+                              document
+                                .getElementById(`cancel-${booking.id}`)
+                                ?.focus(),
+                            );
+                          }}
+                        >
+                          Keep appointment
+                        </button>
+                      </div>
+                    </div>
                   )}
                   {!consultant && (
                     <ConfirmationDownload bookingId={booking.id} />

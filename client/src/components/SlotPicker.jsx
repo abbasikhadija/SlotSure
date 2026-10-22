@@ -15,6 +15,7 @@ export function SlotPicker({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [message, setMessage] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [confirmation, setConfirmation] = useState(null);
@@ -31,11 +32,12 @@ export function SlotPicker({
         );
         if (!controller.signal.aborted) {
           setData(result);
+          setLoadError('');
           setLoading(false);
         }
       } catch (error) {
         if (!controller.signal.aborted) {
-          setError(error.message);
+          setLoadError(error.message);
           setLoading(false);
         }
       }
@@ -49,6 +51,7 @@ export function SlotPicker({
     setLoading(true);
     setSelected('');
     setError('');
+    setLoadError('');
     setMessage('');
     setRefresh((value) => value + 1);
   }
@@ -78,10 +81,10 @@ export function SlotPicker({
       setRefresh((value) => value + 1);
       setError(
         error.status === undefined || error.status >= 500
-          ? `We could not confirm the outcome for ${appointmentLabel(selected, data.timeZone)}. Your booking may have been saved. Contact the consultant before trying again.`
+          ? `We could not confirm the outcome for ${appointmentLabel(selected, data.timeZone)}. Your booking may have been saved. Check My bookings before trying again.`
           : error.status === 401
             ? 'Please sign in again before booking. Reload this page to refresh your account.'
-            : `${error.message} Refresh available times and select again.`,
+            : `${error.message} Available times have been refreshed. Choose another appointment.`,
       );
     } finally {
       submitting.current = false;
@@ -89,7 +92,10 @@ export function SlotPicker({
     }
   }
   async function block() {
-    if (!selected || busy) return;
+    if (!selected || submitting.current) return;
+    submitting.current = true;
+    const controller = new AbortController();
+    bookingRequest.current = controller;
     setBusy(true);
     setError('');
     setMessage('');
@@ -97,21 +103,29 @@ export function SlotPicker({
       await api('/api/provider/blocks', {
         method: 'POST',
         body: { startsAt: selected },
+        signal: controller.signal,
       });
+      if (controller.signal.aborted) return;
       setSelected('');
       setLoading(true);
       setRefresh((value) => value + 1);
       setMessage('Appointment blocked.');
-      onBlocked();
+      await onBlocked?.();
     } catch (error) {
+      if (controller.signal.aborted) return;
       setError(error.message);
+      setSelected('');
+      setLoading(true);
+      setRefresh((value) => value + 1);
     } finally {
-      setBusy(false);
+      submitting.current = false;
+      if (!controller.signal.aborted) setBusy(false);
     }
   }
 
   // Only show a selection while it remains in the current availability response.
-  const hasData = data && !loading && !error && (!date || data.date === date);
+  const hasData =
+    data && !loading && !loadError && (!date || data.date === date);
   const current =
     hasData && data.slots.find((slot) => slot.startsAt === selected);
   if (confirmation)
@@ -121,6 +135,7 @@ export function SlotPicker({
   return (
     <section
       className="schedule-card"
+      aria-busy={loading || busy}
       aria-labelledby={consultant ? 'block-picker-title' : 'slot-picker-title'}
     >
       <p className="eyebrow">
@@ -143,15 +158,21 @@ export function SlotPicker({
               min={data.minDate}
               max={data.maxDate}
               disabled={busy}
+              aria-describedby="date-help"
               onChange={(event) => {
                 setDate(event.target.value);
                 setLoading(true);
                 setSelected('');
                 setError('');
+                setLoadError('');
                 setMessage('');
               }}
             />
           </label>
+          <p className="note" id="date-help">
+            Choose a date, then a time below. Selection alone does not reserve
+            an appointment.
+          </p>
         </>
       )}
       {loading ? (
@@ -174,6 +195,7 @@ export function SlotPicker({
                   onClick={() => {
                     setSelected(slot.startsAt);
                     setMessage('');
+                    setError('');
                   }}
                 >
                   {slotLabel(slot.startsAt, data.timeZone)}
@@ -200,7 +222,8 @@ export function SlotPicker({
             </button>
           ) : (
             <p className="note">
-              Sign in or create an account above to reserve a consultation.
+              <a href="#account">Sign in or create an account</a> to reserve
+              this consultation.
             </p>
           )}
         </div>
@@ -221,6 +244,17 @@ export function SlotPicker({
       {error && (
         <p className="feedback error" role="alert">
           {error}
+          {customer && (
+            <>
+              {' '}
+              <a href="#bookings">Check My bookings</a>
+            </>
+          )}
+        </p>
+      )}
+      {loadError && (
+        <p className="feedback error" role="alert">
+          {loadError} Use Refresh available times to try again.
         </p>
       )}
     </section>

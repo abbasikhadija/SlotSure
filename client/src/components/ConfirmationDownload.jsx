@@ -36,7 +36,14 @@ export function ConfirmationDownload({ bookingId }) {
       // Let the browser start reading the blob before releasing its temporary URL.
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
-      if (!controller.signal.aborted) setError(error.message);
+      if (!controller.signal.aborted)
+        setError(
+          error instanceof TypeError
+            ? 'Could not reach SlotSure. Check your connection and try again.'
+            : error instanceof SyntaxError
+              ? 'Could not read the download response. Please try again.'
+              : error.message,
+        );
     } finally {
       pending.current = null;
       if (!controller.signal.aborted) setBusy(false);
