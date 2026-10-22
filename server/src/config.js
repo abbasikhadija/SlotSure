@@ -35,10 +35,17 @@ export function readAuthConfig(env = process.env) {
   if (env.TRUST_PROXY !== undefined && !['0', '1'].includes(env.TRUST_PROXY)) {
     throw new Error('TRUST_PROXY must be 0 or 1');
   }
+  if (
+    env.SERVE_CLIENT !== undefined &&
+    !['0', '1'].includes(env.SERVE_CLIENT)
+  ) {
+    throw new Error('SERVE_CLIENT must be 0 or 1');
+  }
   return {
     sessionSecret: env.SESSION_SECRET,
     appOrigin: origin.origin,
     secureCookies: production,
     trustProxy: env.TRUST_PROXY === '1' ? 1 : false,
+    serveClient: production || env.SERVE_CLIENT === '1',
   };
 }

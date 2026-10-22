@@ -1,3 +1,108 @@
+# Milestone 8 handoff — 2026-10-22 (Asia/Karachi)
+
+## Final status and boundaries
+
+**Milestone 8 — Final Engineering Verification and Delivery: local portfolio delivery
+implemented and automated verification passed. STOPPED.** Public deployment was not
+performed; no host/domain/database credentials were supplied. The new compiled-client
+browser origin was declined at the permission gate, so that browser check is unverified.
+This supersedes historical handoffs. Initial Git status was clean. Read PROJECT_SPEC.md,
+AGENTS.md, context.md, relevant source and decisions before edits. No commits or pushes.
+All planned milestones are now implemented for local delivery; no next milestone started.
+
+MVP remains one consultant, customer accounts, one consultation type, 30-minute aligned
+appointments, 14 consultant-local booking dates. Same JavaScript/React/Vite/Express/pg/
+PostgreSQL architecture and domain schema. No dependency/migration added. Existing
+authentication, CSRF, ownership, schedule transactions, PDFs and UX were preserved.
+
+## Delivery changes
+
+- Express createApp serves only client/dist when configuration serveClient is enabled.
+  NODE_ENV=production always enables it; optional validated SERVE_CLIENT=1 supports a
+  local HTTP compiled preview. Production still requires HTTPS origin and Secure cookies.
+- API unknown routes terminate with JSON before static middleware. No SPA wildcard
+  fallback (the UI uses fragment links). Compiled serving adds same-origin CSP, nosniff
+  and same-origin Referrer-Policy. Tests prove source/dotfiles/unknown assets unavailable.
+- Startup checks client/dist/index.html before creating resources. Express 5 listen
+  callback handles errors truthfully; a port collision no longer logs a false listener
+  success and now closes session-store/pool resources. Root npm start command added.
+- New server/tests/production.test.js: real HTTP public/private/API/error boundaries,
+  compiled flag and production cookie settings, and child-process port collision exit.
+- README consolidated into actual product/setup/architecture/database/concurrency/API/
+  verification/limits documentation. New docs/DEMO_SETUP.md, FINAL_VERIFICATION.md,
+  deploy/README.md, production.env.example and Caddyfile template. Existing Milestone 7
+  synthetic screenshots copied into docs/screenshots for portable portfolio evidence.
+- Private environment values preserved. Deployment placeholders are not usable secrets.
+  Database migrations and consultant seed remain explicit operator commands, not startup.
+
+## Actual commands and results
+
+- Initial npm test (Node 22.14): PASS 14, 0 failed, 4 DB suites skipped.
+- Initial npm run test:db: PASS 53, 0 failed, 0 skipped on real PostgreSQL 18.1.
+- npm run db:check: PASS, actual SELECT 1.
+- New focused production/startup tests under Node 22.14: PASS 3/3.
+- Available bundled Node runtime discovered as 24.19.0. Full node --test tests/*.test.js
+  from server/ with that executable: PASS 17, 0 failed, 4 explicit DB skips.
+- Node 24 --env-file-if-exists=.env src/db/test.js from server/: PASS 53, 0 failed,
+  0 skipped. Runner child processes use the same Node executable. Covers fresh empty
+  schemas, repeat migrations, failed DDL rollback, seed/schema integrity, all existing
+  authorization/CSRF/session/race/history/cancellation/PDF scenarios. Development DB
+  never cleared. Intentional error-injection tests print only generic safe API messages.
+- npm run build (Node 22) and explicit bundled Node 24 Vite build: PASS, 22 modules.
+  Node 24 emitted only an informational build-plugin timing warning, not a failure.
+- npm audit --omit=dev: 0 known production vulnerabilities. npm ls --depth=0 reviewed:
+  no unused/speculative runtime additions. Audit is not a complete security certification.
+- Ignored .local/m8-inspect.mjs: referenced compiled HTML JS/CSS assets exist; configured
+  DATABASE_URL, TEST_DATABASE_URL and SESSION_SECRET absent from unignored source and
+  compiled output. No actual secret or connection string printed.
+- Final npm run lint and npm run format:check: PASS after documentation updates.
+- git diff --check: PASS with configured LF/CRLF notices only. Ignored server/.env
+  and .local audit/fixture files verified; git ls-files lists neither path.
+- Production template checked against official Express/Caddy documentation using the
+  read-docs workflow. Caddy is not installed locally; config validation command not run.
+
+## Browser and deployment verification limits
+
+Latest successful UI journeys remain Milestone 7 (docs/UX_REVIEW.md): actual customer
+registration/login, conflict recovery/booking/confirmation/PDF, customer/consultant
+cancellation/history/rebooking, hours/block/unblock, keyboard focus and 320–1280px checks.
+Included screenshots are explicitly labeled as those development captures, not a
+public deployment or proof of the new compiled configuration.
+
+A separate local HTTP compiled smoke server started on port 3001 as owned PID 17892,
+using transient process variables (SERVE_CLIENT=1, local APP_ORIGIN, non-production
+cookies) without editing server/.env. Browser navigation to http://127.0.0.1:3001 was
+explicitly declined by the browser permission gate. No alternate browser/origin or
+indirect workaround was attempted. That server was stopped at the end. Automated
+production HTTP tests use their own isolated test listeners and were executed normally.
+
+No public deployment, actual deployed HTTPS/proxy/browser execution, remote PostgreSQL,
+Caddy binary validation, fresh npm ci, load benchmark, physical-device matrix, or full
+WCAG/screen-reader certification claimed. Public rollout requires the deploy runbook.
+
+## Files and local state
+
+Modified: server/src/app.js, config.js, index.js, server/.env.example, root package.json,
+README.md, docs/DECISIONS.md and context.md. New: server/tests/production.test.js,
+deploy/{production.env.example,Caddyfile,README.md}, docs/{DEMO_SETUP.md,
+FINAL_VERIFICATION.md,screenshots/consultant-desktop.png,screenshots/booking-confirmation.png}.
+Package lock/dependencies and domain migrations unchanged. Local demo records/accounts
+were not modified in this milestone. Existing dev servers and PostgreSQL were preserved;
+only the owned temporary compiled smoke server was stopped. Ignored audit/inspection
+files remain under .local. Existing screenshots are synthetic-data captures.
+
+## Remaining limits and immediate next step
+
+No failing executed checks. Local delivery is ready with the explicit browser/deployment
+verification limits above. Public deployment is pending supplied hosting/domain/database
+configuration and authorized access; perform and record real HTTPS/UI verification there.
+No later milestone is defined. Product limits remain documented: no email recovery,
+process-local rate limits (single API instance), no persisted idempotency response replay,
+stale other tabs/offset pages, and dated PDFs with finite font coverage. Do not invent
+rollout success or URLs. Never commit/push without explicit user instruction.
+
+---
+
 # Milestone 7 handoff — 2026-10-22 (Asia/Karachi)
 
 ## Current status and boundaries

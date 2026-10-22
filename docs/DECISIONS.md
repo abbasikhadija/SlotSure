@@ -320,3 +320,51 @@ preparation and aborts. All 53 real PostgreSQL regression tests remain passing.
 not replace that draft; reload intentionally reloads saved hours. Other tabs still
 require refresh. Cancellation resets the time picker to today but leaves the hours
 editor intact. Detailed results and limits are recorded in docs/UX_REVIEW.md.
+
+## 2026-10-22 — Milestone 8 production delivery and final verification
+
+**Decision:** Serve client/dist from the existing Express process in production,
+with optional SERVE_CLIENT=1 for a local compiled preview. Keep /api routing/errors
+before static middleware and use no wildcard HTML fallback because navigation is
+fragment-based. Send same-origin CSP, nosniff and referrer policy for compiled serving.
+
+**Problem:** The complete product previously required Vite at runtime and lacked a
+concrete same-origin production delivery path.
+
+**Alternatives:** Separate frontend hosting/CDN, a production Vite server, or another
+application server/dependency.
+
+**Reasoning:** One UI/API origin fits the existing cookie/CSRF architecture and the
+single-process MVP. Serve only the compiled public directory; tests verify private
+files/source/missing API routes remain unavailable. Production forces compiled serving
+and keeps HTTPS/Secure-cookie validation even if SERVE_CLIENT=0 is supplied. Startup
+checks the build before connecting resources; migrations/seeding remain explicit steps.
+Official Express static reference: https://expressjs.com/en/api/express/.
+
+**Trade-off:** Build artifacts and licensed font assets must travel with the release.
+The compiled-browser/CSP execution check remains unverified because permission for its
+new local origin was declined; automated file-serving/auth/error boundary tests passed.
+
+**Decision:** Supply a one-host, one-trusted-TLS-proxy deployment template and runbook,
+consolidate README/setup, include existing synthetic-data screenshots, and record final
+security/query review and actual results. Use the available bundled Node 24.19 runtime
+for final tests/build without changing the user's system Node 22.14 installation.
+
+**Problem:** Portfolio delivery needs reproducible configuration and explicit evidence,
+without inventing a public deployment or publishing private credentials.
+
+**Alternatives:** Choose an unrequested hosting vendor, silently weaken cookies for an
+HTTP demo, publish local credentials, or claim prior UI checks prove deployed TLS.
+
+**Reasoning:** The generic Caddy template matches the existing one-hop proxy trust
+setting. Its defaults were checked in official documentation; no binary/hosting target
+was available for execution. Placeholders fail secret validation until replaced. All
+53 real PostgreSQL tests and 17 non-DB tests passed on Node 24, including fresh/repeated/
+failed migrations. No production dependency vulnerabilities were reported by npm audit.
+Startup now handles Express 5's error callback without a false success log and closes
+resources on listen failure; a real port-collision child-process test verifies this.
+
+**Trade-off:** Public deployment, proxy/TLS operations and a compiled browser journey
+still need target access and explicit verification. Existing Milestone 7 browser results
+remain the latest UI evidence. No runtime dependency, domain schema, or MVP expansion.
+See docs/FINAL_VERIFICATION.md and deploy/README.md for the exact scope and limits.

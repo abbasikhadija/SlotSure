@@ -1,4 +1,5 @@
 import express from 'express';
+import { fileURLToPath } from 'node:url';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import { csrfSync } from 'csrf-sync';
@@ -12,10 +13,30 @@ import { bookingsRouter } from './routes/bookings.js';
 import { createBookingManagement } from './services/booking-management.js';
 import { createConfirmationService } from './services/confirmation.js';
 
-export function createApp({ pool, config, sessionSchema = 'public' }) {
+export const compiledClientDirectory = fileURLToPath(
+  new URL('../../client/dist/', import.meta.url),
+);
+
+export function createApp({
+  pool,
+  config,
+  sessionSchema = 'public',
+  clientDirectory = compiledClientDirectory,
+}) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy);
+  if (config.serveClient) {
+    app.use((_req, res, next) => {
+      res.set('X-Content-Type-Options', 'nosniff');
+      res.set('Referrer-Policy', 'same-origin');
+      res.set(
+        'Content-Security-Policy',
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+      );
+      next();
+    });
+  }
   app.get('/api/health', (_req, res) =>
     res.json({ status: 'ok', service: 'slotsure-api' }),
   );
@@ -113,11 +134,18 @@ export function createApp({ pool, config, sessionSchema = 'public' }) {
     requireConsultant,
     providerAvailabilityRouter(availability),
   );
-  app.use((_req, res) =>
+  const notFound = (_req, res) =>
     res
       .status(404)
-      .json({ error: { code: 'NOT_FOUND', message: 'Route not found' } }),
-  );
+      .json({ error: { code: 'NOT_FOUND', message: 'Route not found' } });
+  // Unknown API routes stay JSON; never fall through to client files or HTML.
+  app.use('/api', notFound);
+  if (config.serveClient) {
+    app.use(
+      express.static(clientDirectory, { dotfiles: 'ignore', redirect: false }),
+    );
+  }
+  app.use(notFound);
   app.use(errorHandler);
   return app;
 }

@@ -1,169 +1,161 @@
 # SlotSure
 
-Book your time. No clashes, no confusion.
+**Book your time. No clashes, no confusion.**
 
-## Milestone 7 product quality
+SlotSure helps an independent consultant and their customers replace scheduling
+messages with reliable appointment booking. Customers choose a time, review or cancel
+appointments, and download a PDF. The consultant manages hours, blocks, and bookings.
 
-The interface now has role-aware navigation, a keyboard skip link, responsive time
-buttons, mobile controls, password visibility, and working-hours validation. Booking
-conflicts keep freshly available alternatives visible. Cancellation asks for an inline
-confirmation and preserves unsaved consultant hours during the resulting refresh.
-Connection failures provide a retry path, and uncertain booking outcomes link to My
-bookings. All business rules and authorization remain enforced by the backend.
+## Status
 
-Actual customer and consultant browser journeys, including PDF downloads, passed at
-desktop and mobile viewport widths. See [the UX review](docs/UX_REVIEW.md) for executed
-checks, fixtures, evidence, and limits. This is not a comprehensive accessibility audit.
+Milestones 0–8 are implemented for local portfolio delivery. Final automated checks
+passed on Node 24.19.0 and PostgreSQL 18.1; the existing Node 22.14 environment is
+also supported. Customer/consultant browser journeys passed in Milestone 7.
+Production serving and startup are tested over HTTP. The new compiled-client browser
+check was not run because browser access to its local origin was declined.
 
-## Milestone 6 PDF confirmation
+**No public deployment or deployed HTTPS verification has been performed.** Deployment
+configuration is prepared; a host, domain, database, and credentials must be supplied.
+See [final verification](docs/FINAL_VERIFICATION.md) and [deployment](deploy/README.md).
 
-Customers can choose **Download PDF** on the booking confirmation screen or any
-entry in My bookings, including canceled history. Downloads use the current session
-and show pending/error feedback. Consultants inspect appointments in their dashboard;
-the PDF endpoint is customer-only.
+## Features and boundaries
 
-GET `/api/bookings/:id/confirmation.pdf` returns an attachment named
-`SlotSure-SS-000123.pdf` (using the booking's actual reference), with content type
-application/pdf, Cache-Control: no-store, and X-Content-Type-Options: nosniff.
-Unauthenticated requests return 401, consultants 403, malformed IDs 400, and foreign
-or missing bookings the same 404 JSON. Errors are returned as JSON before PDF headers.
+- One consultant, registered customers, one consultation type, exactly 30 minutes.
+- A 14-date window in the consultant's IANA zone: today through today + 13, excluding
+  appointment starts at or before now. Default zone: Asia/Karachi.
+- One continuous half-hour-aligned working interval per weekday; individual blocks.
+- Authenticated booking, clear conflicts, upcoming/history views, future cancellation.
+- Canceled records remain stored. The owner or consultant may cancel future confirmed
+  bookings; repeats return the original canceled state and timestamp.
+- Authorized customer PDF downloads include truthful confirmed/canceled status.
+- Responsive controls, keyboard navigation, loading/error/empty states and retry paths.
 
-The PDF includes booking reference, customer name/email, consultant, local date and
-time range, time zone, 30-minute duration, status, and a status-check timestamp.
-Canceled bookings say **CANCELED**, include their cancellation timestamp, and explain
-that the record does not reserve a time. It is an explicitly dated snapshot; a saved
-PDF cannot reflect a later cancellation. My bookings remains the current status view.
+No payments, notifications, multiple consultants/types, calendar integrations,
+variable durations, or AI features. Email verification and password recovery are
+excluded. This is a focused portfolio MVP, not a commercial identity platform.
 
-PDFKit generates a complete buffer on demand from one authorized database snapshot.
-No PDF files, URLs, or storage service are persisted by the application. A licensed
-DejaVu Sans font is bundled for portable rendering; full multilingual font fallback
-is outside the MVP. PDF.js is a development-only dependency for parsing response content
-in tests. The backend runtime does not import it.
+## Screenshots
 
-## Milestone 5 booking management
+These are real Milestone 7 desktop browser captures using synthetic data. They show
+the development UI, not a public deployment. The pictured booking was later canceled.
 
-Signed-in customers have **My bookings**; consultants have **Consultant appointments**.
-Upcoming lists future confirmed appointments in time order. History includes past
-appointments and canceled reservations. Customers see only their own records;
-consultants also see the customer's name/email. Dates include the year and use the
-consultant's configured time zone.
+![Consultant interface](docs/screenshots/consultant-desktop.png)
 
-- GET `/api/bookings/my`: customer-only booking list.
-- GET `/api/provider/bookings`: consultant-only booking list.
-- Both accept `view=upcoming` (default) or `view=history`, and `page=1` (default,
-  range 1–9999). Responses contain bookings, view, page, hasMore, and timeZone.
-  Each page contains at most 50 records. Refresh if records move between pages
-  while another request changes the schedule.
-- PATCH `/api/bookings/:id/cancel`: JSON `{}`, authenticated customer owner or
-  consultant, with the existing session CSRF token. Returns 200 with the booking.
-  Foreign and missing records both return 404. Invalid identifiers/body return 400. Confirmed appointments at or before their start return 409 for both roles.
+![Booking confirmation](docs/screenshots/booking-confirmation.png)
 
-Cancellation changes status and canceledAt; it never deletes a reservation. Repeat
-requests return the existing canceled state without changing its timestamp. Current
-ownership and future eligibility are checked after acquiring the schedule lock.
-The list response supplies canCancel, but the backend always validates again.
-Canceled times reappear only when current hours, blocks, and other bookings permit.
-The UI refreshes bookings and availability after cancellation; successful booking
-refreshes the dashboard. An account change aborts old dashboard requests.
+## Stack and architecture
 
-Reloaded bookings can now be found in the dashboard, with PDFs available above.
+JavaScript, React/Vite, Express, PostgreSQL and parameterized SQL through pg. Argon2id,
+express-session, connect-pg-simple, csrf-sync and express-rate-limit implement account
+security. Luxon handles IANA-zone arithmetic; Intl formats browser labels. PDFKit
+creates PDFs in memory; PDF.js is used only by development tests.
 
-## Milestone 4 booking workflow
+```text
+Development: browser :5173 → Vite /api proxy → Express :3000 → PostgreSQL
+Production:  browser HTTPS → one trusted TLS proxy → Express (UI + /api) → PostgreSQL
+```
 
-Sign in as a customer, select an available date/time, and choose **Book consultation**.
-Confirmation shows consultant, date, time, duration, reference, and status. Conflicts
-clear the selection and refresh availability. A synchronous submission guard prevents
-double clicks; repeated requests for an occupied slot return 409.
+Routes enforce authentication/roles; services own business rules and SQL. The app is
+constructed with its pool/configuration; startup owns the listener and shutdown.
+React uses built-in state. Credentials never enter Vite variables or browser storage.
+See [engineering decisions](docs/DECISIONS.md) and [UX review](docs/UX_REVIEW.md).
 
-POST `/api/bookings` accepts only `{ "startsAt": "2026-10-29T09:30:00+05:00" }`
-(use a future in-window available time). It requires customer authentication and CSRF.
-The server derives ownership, validates after acquiring the consultant lock, inserts
-inside the transaction, and returns 201 only after commit. The `booking` response has
-id, reference, consultantName, startsAt, endsAt, durationMinutes, timeZone, and status.
-Invalid input returns 400; authentication/role failures return 401/403; occupied times
-return 409. Booking reads, cancellation, and PDFs are available as described above.
+### Database and double-booking protection
 
-Confirmation is held in page memory; reload loses the displayed confirmation but
-retains the reservation. Keep the reference. On uncertain network/server failure, the
-UI warns that the booking may have saved and does not automatically retry. Persistent
-idempotency keys are not implemented. Reloaded reservations are available in My
-bookings. Historical read-only selection descriptions below are superseded here.
+| Table             | Purpose and guarantees                                                           |
+| ----------------- | -------------------------------------------------------------------------------- |
+| users             | Unique normalized email, customer/consultant roles, one consultant index         |
+| weekly_hours      | ISO weekdays 1–7; one valid aligned interval per day                             |
+| blocked_slots     | Unique finite TIMESTAMPTZ appointment starts                                     |
+| bookings          | Customer FK, finite start, confirmed/canceled status with consistent canceled_at |
+| user_sessions     | PostgreSQL-backed expiring sessions                                              |
+| schema_migrations | Applied migration filenames                                                      |
 
-SlotSure will help independent consultants and their customers replace manual scheduling messages with reliable appointment booking. The MVP is limited to one consultant, registered customers, one consultation type, 30-minute appointments, and a 14-day booking window.
+All schedule writes use one checked-out client and transaction: lock the consultant
+row with FOR UPDATE, recheck time/ownership/current schedule, mutate, commit, release.
+Rollback prevents partial records. A partial unique index additionally prevents two
+confirmed bookings at the same aligned start while permitting canceled history.
+The shared lock also coordinates bookings with blocks and working-hour changes;
+uniqueness alone cannot protect those cross-table rules. Schedule writes serialize
+for this single consultant, which is an intentional MVP trade-off.
 
-## Current status
-
-Milestone 6 PDF confirmation and booking management are implemented: customers review their own appointments and cancel future bookings; consultants review and cancel future customer bookings. Canceled history is preserved. Booking, availability management, authentication, and PostgreSQL sessions remain available. Authorized customer PDFs include current confirmed/canceled status. Milestone 7 product quality and browser journeys are verified; final engineering verification and delivery are next.
-
-Read [PROJECT_SPEC.md](PROJECT_SPEC.md) for requirements and [context.md](context.md) for the verified handoff.
-
-## Stack and structure
-
-- `client/`: React, Vite, JavaScript, CSS.
-- `server/`: Node.js, Express, `pg`; Node's built-in test runner.
-- Root npm workspaces share one dependency lockfile; ESLint and Prettier cover both packages.
-- In development, browser → Vite `/api` proxy → Express → PostgreSQL when explicitly requested.
-- Backend-only `DATABASE_URL` is never a `VITE_` variable.
+Availability is derived with one bounded statement per requested date, never one
+query per slot. Slots are not persisted. Instants are stored as TIMESTAMPTZ; no
+manual zone offsets are added. Tests cover DST gaps/repeated times and non-hour zones.
 
 ## Local setup
 
-Use Node **24 LTS** and npm; the existing Node **22.14.0** environment is also supported. Install PostgreSQL (verified with version 18). No Docker is required.
+Use Node **24 LTS**, npm and PostgreSQL (verified with PostgreSQL 18.1). Node 22.14
+is supported where already installed. No Docker is required.
 
-From the repository root:
-
-```powershell
-npm ci
-Copy-Item server/.env.example server/.env
-```
-
-Using your PostgreSQL administrator account, create a local login and empty database (replace the placeholder password):
+1. Run `npm ci` at repository root.
+2. For a fresh checkout, copy `server/.env.example` to `server/.env`. Preserve an
+   existing configured file. Keep all real credentials in ignored files/environment.
+3. Using a PostgreSQL administrator, create the application login and empty database:
 
 ```sql
-CREATE ROLE slotsure LOGIN PASSWORD 'YOUR_LOCAL_PASSWORD';
+CREATE ROLE slotsure LOGIN PASSWORD 'CHOOSE_A_LOCAL_PASSWORD';
 CREATE DATABASE slotsure OWNER slotsure;
 ```
 
-Edit `server/.env` to set your actual `DATABASE_URL`. Percent-encode reserved characters in URI passwords. The example uses PostgreSQL port 5432; use your instance's actual port. Keep `.env` private. Do not commit credentials. Apply the database migrations using the Milestone 1 instructions below.
+4. Set DATABASE_URL in server/.env. Percent-encode reserved password characters in a
+   URI. Configure a random SESSION_SECRET of at least 32 bytes. This command replaces
+   the example placeholder directly in the ignored file, without printing the secret:
 
 ```powershell
-npm run db:check
+node --input-type=module -e "import fs from 'node:fs'; import {randomBytes} from 'node:crypto'; const f='server/.env'; const s=fs.readFileSync(f,'utf8').replace(/^SESSION_SECRET=.*$/m,'SESSION_SECRET='+randomBytes(32).toString('hex')); fs.writeFileSync(f,s);"
 ```
 
-Expected: `PostgreSQL connectivity verified (SELECT 1).` A failure returns a nonzero exit code; check that PostgreSQL is running and that the URL, user, password, port, and database are correct.
+5. Run `npm run db:check`, then `npm run db:migrate`.
+6. Create the consultant using [demo/account setup](docs/DEMO_SETUP.md). No default
+   account or weekly hours are automatically installed. Customers use registration.
+7. Start `npm run dev:server` and `npm run dev:client` in separate terminals. Open
+   [the local application](http://127.0.0.1:5173) consistently; do not mix localhost
+   with 127.0.0.1. Sign in as consultant and configure weekly hours before booking.
 
-Start two terminals from the repository root:
+API liveness: [health](http://127.0.0.1:3000/api/health). Liveness is deliberately
+independent of database readiness; use db:check for actual PostgreSQL connectivity.
+Backend environment variables override server/.env. No frontend .env is necessary.
 
-```powershell
-npm run dev:server
-```
+### Configuration
 
-```powershell
-npm run dev:client
-```
+| Variable             | Meaning                                                                      |
+| -------------------- | ---------------------------------------------------------------------------- |
+| DATABASE_URL         | Backend-only PostgreSQL connection URL                                       |
+| SESSION_SECRET       | Random secret, minimum 32 bytes; changing it invalidates cookies             |
+| APP_ORIGIN           | Exact browser origin; HTTPS mandatory in production                          |
+| CONSULTANT_TIME_ZONE | IANA zone, default Asia/Karachi                                              |
+| HOST / PORT          | Default 127.0.0.1 / 3000; adjust Vite proxy if changing development API port |
+| TRUST_PROXY          | 0 by default; 1 only behind the single trusted proxy described in deployment |
+| SERVE_CLIENT         | Optional 1 for local compiled UI preview; production always serves the build |
+| NODE_ENV             | production enables Secure cookies and compiled client serving                |
+| TEST_DATABASE_URL    | Separate database ending in _test, used only for integration tests           |
 
-Configure the session secret and apply migrations using the authentication setup instructions below before starting the API. Open [SlotSure locally](http://127.0.0.1:5173) to register or sign in. API liveness is also available at [the health endpoint](http://127.0.0.1:3000/api/health). Liveness does not check PostgreSQL; use `db:check` for that.
+For an HTTP compiled preview, set SERVE_CLIENT=1 and APP_ORIGIN to the Express
+listener's origin, run `npm run build`, then `npm start`. Keep NODE_ENV out of
+production for this HTTP-only preview; production cookies require real HTTPS.
+Express serves only client/dist, with a same-origin CSP and nosniff. Missing build
+fails startup. Unknown API routes remain JSON; there is no HTML fallback for them.
 
-`PORT` defaults to 3000 and `HOST` to `127.0.0.1`; if changing the API port, update `client/vite.config.js` too. `CONSULTANT_TIME_ZONE` defaults to `Asia/Karachi` and is validated as an IANA zone. Appointments use this consultant time zone. The backend reads `server/.env`; exported environment variables take precedence. No frontend environment file is needed.
+### Prepared Windows workspace
 
-### Instance prepared in this workspace
-
-An isolated PostgreSQL 18.1 cluster exists in ignored `.local/postgres`, with the migrated `slotsure` database on loopback port **55432**. Its generated credentials are already in ignored `server/.env`. On this workspace, keep that file rather than copying over it. The database and both development servers were left running at handoff.
-
-After restarting the machine, start this local cluster from the repository root:
+This workspace has an ignored password-authenticated cluster in .local/postgres,
+loopback port 55432, with slotsure and slotsure_test configured in ignored server/.env.
+Do not overwrite those credentials. To start it after a restart:
 
 ```powershell
 & 'C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe' -D .local/postgres -l .local/postgres.log -o '-h 127.0.0.1 -p 55432 -c shared_buffers=16MB' -w start
 ```
 
-To stop it:
+Stop it with the same executable and `-D .local/postgres -m fast -w stop`. Other
+checkouts follow ordinary PostgreSQL setup. The local cluster is not a deployment
+configuration. Stop existing development listeners before starting duplicates.
 
-```powershell
-& 'C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe' -D .local/postgres -m fast -w stop
-```
+## Verification
 
-This disposable development cluster uses password authentication and is not a production database configuration. It is not included in Git. Other checkouts should follow the ordinary setup above. Stop frontend/backend terminals with Ctrl+C before starting another copy on the same ports.
-
-## Verification commands
+Create slotsure_test using `npm run db:test:setup` (requires CREATEDB), or ask the
+administrator to create it owned by the application login. Set TEST_DATABASE_URL in
+ignored server/.env, with a database name ending in _test. Never use development data.
 
 ```powershell
 npm test
@@ -174,163 +166,56 @@ npm run format:check
 npm run build
 ```
 
-`npm test` checks actual HTTP liveness/404 behavior and invalid configuration. `db:check` separately requires real PostgreSQL and never substitutes a mock. `npm run build` creates `client/dist`; `npm run preview --workspace client` previews that static build. Preview does not proxy the API; use the Vite development server for the connected foundation page. Production hosting is deferred.
+`npm test` runs pure/HTTP/PDF/client/production tests and explicitly skips four DB
+suites unless TEST_DATABASE_URL is exported. `test:db` is mandatory: it requires
+explicit configuration, migrates empty unique schemas on real PostgreSQL, tests
+fresh/repeat/failed migrations, seeds synthetic accounts, exercises authenticated
+HTTP/races/rollback, and removes only its own schemas. It never clears development.
+Final Node 24 results: **17 passed / 4 skipped** for ordinary tests; **53 passed /
+0 skipped** for database tests. No failures. See the final verification report for
+commands, runtime differences and checks that were not run.
 
-Use `npm run format` to format authored files. `PROJECT_SPEC.md` is preserved unchanged.
+## API and usage
 
-## Planned database and reliability
+- GET /api/auth/csrf; POST /api/auth/register, /login, /logout; GET /api/auth/me.
+  Registration creates a customer, then requires sign-in. Names 1–100 characters,
+  passwords 12–128. Roles cannot be chosen through registration.
+- GET /api/availability?date=YYYY-MM-DD (default consultant-local today), returns
+  server date bounds and UTC slot instants without customer data.
+- POST /api/bookings accepts only `{ "startsAt": "explicit-offset-ISO-instant" }`.
+  A valid request returns 201 only after commit; occupied times return 409.
+- GET /api/bookings/my and GET /api/provider/bookings accept view=upcoming|history
+  and page=1..9999; at most 50 records, with hasMore. Provider responses include
+  customer name/email. Customer responses are limited to the authenticated owner.
+- PATCH /api/bookings/:id/cancel accepts `{}`; owner or consultant. Past/started
+  confirmed appointments return 409; foreign and missing bookings share 404.
+- GET /api/bookings/:id/confirmation.pdf is customer-owner only. Canceled PDFs are
+  visibly canceled, include cancellation time, and never claim a reserved time.
+- Consultant GET/PUT /api/provider/hours; GET/POST /api/provider/blocks;
+  DELETE /api/provider/blocks/:id. Hours replacement uses `{ "hours": [...] }`;
+  each entry has weekday, startTime and endTime. Missing weekdays are unavailable.
+  Blocks accept startsAt; delete accepts `{}`. Changes never silently cancel bookings.
 
-Migrations implement users, weekly hours, blocked slots, bookings, and PostgreSQL sessions. Confirmed bookings use a partial unique index on start times. Availability mutations now acquire a transaction-scoped lock on the consultant row, then recheck schedule-dependent rules on the same checked-out client. Booking mutations now use that protocol too, verified by real PostgreSQL HTTP races. Cancellation mutations now use the same lock protocol and are verified by real PostgreSQL races.
+All mutations require JSON and a session-bound X-CSRF-Token from the CSRF endpoint.
+Login rotates session/CSRF state. A supplied Origin must match APP_ORIGIN. Cookies
+are HttpOnly, SameSite=Lax, Secure in production, with eight-hour expiry. Sessions
+live in PostgreSQL. There is no permissive cross-origin API access.
 
-## Limitations
+## Known limits
 
-No deployment or distributed default demo credentials exist yet. Authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No deployment link is available.
+- No public deployment or actual deployed TLS check; compiled-client browser access
+  was declined during final verification. UI journeys were verified in development.
+- Login/registration counters are process-local; use a single API instance for this MVP.
+- No email verification, password recovery, MFA, or claim of commercial identity readiness.
+- No persistent booking idempotency replay. A lost response may hide a saved booking;
+  check My bookings before retrying. Confirmation-screen state is lost on reload.
+- Other tabs need refresh; offset pages can shift. Provider drafts survive refresh;
+  reload intentionally discards them. Cancellation resets selected time.
+- PDFs are dated snapshots, not live guarantees. Embedded font has finite coverage;
+  multilingual typesetting is excluded. No permanent PDF files are stored.
+- No physical-device, screen-reader matrix or exhaustive WCAG certification.
+- Run one migration setup process; there is no automatic downgrade/checksum system.
 
-See [engineering decisions](docs/DECISIONS.md). Milestone 8 requires explicit authorization.
-
-## Milestone 1 database setup
-
-Run `npm run db:migrate` after configuring `server/.env`. SQL migrations in
-`server/migrations/` run in filename order in one transaction; `schema_migrations`
-records applied files, so repeat runs leave existing data intact. Do not edit applied
-migrations; add a new numbered SQL file. Run one migration process during setup.
-No default weekly hours or consultant credentials are installed.
-
-For controlled consultant creation, place `CONSULTANT_NAME`, `CONSULTANT_EMAIL`,
-and `CONSULTANT_PASSWORD_HASH` in ignored `server/.env`, then run `npm run db:seed`.
-The hash must be a complete encoded Argon2id hash generated with an established
-password-hashing library, using a randomly salted password chosen locally. Quote
-it with single quotes in the environment file to preserve its dollar signs. Never
-use the synthetic test hash as an account credential. The seed accepts no plaintext
-password, creates at most one consultant, and leaves an existing consultant unchanged.
-It has no HTTP endpoint. Password hashing and authentication are implemented in Milestone 2.
-
-Run `npm run db:test:setup` to create `slotsure_test` without dropping any database.
-This requires CREATEDB permission; alternatively ask the database administrator to
-create that database owned by the application role. Set `TEST_DATABASE_URL` in
-`server/.env` to the same local connection settings with database `slotsure_test`.
-Then run `npm run test:db`. This command fails if the variable is absent, and tests
-reject database names that do not end in `_test`. Each run migrates an empty unique
-schema and removes only that schema afterward. The development database is never
-cleared. `npm test` runs foundation tests and explicitly skips database tests unless
-TEST_DATABASE_URL is exported; run `test:db` for mandatory database verification.
-
-Schema conventions: ISO weekdays 1–7; absent weekly-hours rows mean unavailable;
-24:00 is allowed only as an interval end. Appointment duration is implicit at 30
-minutes. Instants use TIMESTAMPTZ. Customer email must be trimmed lowercase before
-insertion; a unique constraint prevents duplicates. Bookings retain canceled rows
-and use a partial unique index for confirmed start times. The customer foreign key
-prevents deleting referenced users. Future services must enforce customer role,
-consultant-local slot alignment, the booking window, working hours, and cross-table
-booking/block conflicts using the specified consultant-row locking protocol. These
-business rules are not yet implemented by the schema alone.
-
-## Milestone 2 authentication setup
-
-Before starting the API, configure `SESSION_SECRET` in `server/.env` with at least
-32 random bytes. Generate it directly into that ignored file without printing it:
-
-```powershell
-node --input-type=module -e "import fs from 'node:fs'; import {randomBytes} from 'node:crypto'; const f='server/.env'; let s=fs.readFileSync(f,'utf8'); s=s.replace(/^SESSION_SECRET=.*$/m,'SESSION_SECRET='+randomBytes(32).toString('hex')); fs.writeFileSync(f,s);"
-```
-
-The example environment includes the placeholder line this command replaces. The
-prepared workspace already has a generated secret; keep it. Changing it invalidates
-existing cookies. Apply `npm run db:migrate` to create `user_sessions` before login.
-
-`APP_ORIGIN` is the exact browser origin, default `http://127.0.0.1:5173`; use that
-address consistently. Do not switch between localhost and 127.0.0.1. Production
-requires `NODE_ENV=production`, an HTTPS APP_ORIGIN, and HTTPS access. Cookies are
-HttpOnly, SameSite=Lax, host-only, and Secure in production, with an eight-hour
-lifetime. `TRUST_PROXY=0` is the default. Use `TRUST_PROXY=1` only when deploying
-behind exactly one trusted proxy that overwrites forwarded headers and is the only
-route to the backend. HTTPS deployment has not been performed or verified.
-
-The page provides customer registration, login, an account summary, and logout.
-Registration creates a customer account and then asks the user to sign in. Names
-are 1–100 characters, passwords 12–128 characters, and email addresses are trimmed
-and lowercased. Passwords are salted and hashed using the Argon2id library defaults.
-The server rejects client-supplied roles and extra account fields. Consultant accounts
-still use the local seed command and genuine externally generated Argon2id hashes.
-
-API flow: GET `/api/auth/csrf` before a mutation; send its token in `X-CSRF-Token`
-and a JSON request body. POST `/api/auth/register`, `/api/auth/login`, and
-`/api/auth/logout` are protected. Login regenerates the session ID and returns a new
-CSRF token. GET `/api/auth/me` returns the current account or 401. Unsafe requests
-with a supplied Origin must match APP_ORIGIN; clients without Origin still require
-a session-bound CSRF token. There is no cross-origin CORS access. Auth responses
-are not cacheable. Roles are read from PostgreSQL rather than trusted from the client
-or a stale role stored in the session. The `/api/provider` namespace rejects
-anonymous callers (401) and customers (403); consultants can now manage hours and blocks.
-
-Login allows ten failed requests per IP per 15 minutes; successful requests are not
-counted. Registration allows five requests per IP per 15 minutes. Excess requests
-receive JSON 429 responses and Retry-After. These counters are process-local and
-reset on restart; the MVP runs as a single API process. Sessions themselves persist
-in PostgreSQL across application restarts and are deleted on logout. Email verification,
-password recovery, MFA, and appointment functionality are outside this milestone.
-
-Run `npm run test:db` for both schema and HTTP authentication integration tests
-against real PostgreSQL. Run `npm test` for validation/configuration/foundation tests;
-the four integration suites are explicitly skipped there unless TEST_DATABASE_URL is
-exported. No mock session store is substituted for PostgreSQL.
-
-## Milestone 3 availability workflow
-
-Sign in as the locally seeded consultant to edit weekly working hours. Enable a
-weekday and choose one continuous interval on the 30-minute grid. `24:00` is allowed
-as an end boundary. Unchecked days are unavailable. Saving replaces the whole week
-atomically. Existing confirmed reservations are preserved; a warning reports how
-many future reservations fall outside the new hours. It never cancels them.
-
-Use **Block an appointment** to select a date and available time, then block it.
-Blocks disappear from availability immediately after refresh. **Blocked appointments**
-lists the current booking window and allows unblocking, including blocks that no
-longer fall inside the latest weekly hours. Blocking a booked or already blocked
-appointment returns 409. Repeated deletion returns 404 without changing other rows.
-
-Visitors and signed-in customers can choose a date and time. Selection is read-only;
-there is no booking button or booking API in this milestone. Refresh clears stale
-selections. All labels use the consultant's IANA time zone, including UTC offsets
-that distinguish repeated daylight-saving times.
-
-The booking window is exactly **14 consultant-local calendar dates: today through
-13 days ahead**, inclusive. Starts at or before the current instant are excluded.
-Appointments last 30 elapsed minutes. Luxon walks real instants within each local
-day, avoiding nonexistent spring times and preserving distinct autumn occurrences.
-No manual UTC offsets are added. Missing `date` defaults to the consultant's today
-and returns server-computed date bounds so the browser does not assume its own zone.
-Invalid dates and dates outside the window return 400. Availability is a snapshot,
-not a reservation; Milestone 4 must revalidate it inside the booking transaction.
-
-Availability API:
-
-- GET `/api/availability?date=YYYY-MM-DD`: date, timeZone, minDate, maxDate,
-  durationMinutes, and slots containing UTC startsAt/endsAt. No customer details.
-- GET/PUT `/api/provider/hours`: PUT JSON `{ "hours": [{ "weekday": 1,
-"startTime": "09:00", "endTime": "17:00" }] }`; omitted weekdays are unavailable.
-  Responses include outsideHoursCount. Weekdays follow ISO Monday=1 through Sunday=7.
-- GET `/api/provider/blocks`: blocks within the current 14-date window.
-- POST `/api/provider/blocks`: JSON `{ "startsAt": "2026-10-22T09:00:00+05:00" }`
-  (replace this example with a future in-window time from availability).
-- DELETE `/api/provider/blocks/:id`: JSON `{}`. All mutations require a session-bound
-  CSRF token and consultant authorization, as described above.
-
-Availability executes one bounded SQL statement per requested day, reading hours,
-confirmed reservations, and blocks from the same database snapshot. Generated slots
-are never persisted. Hours replacement, blocking, and unblocking use one checked-out
-client, a consultant-row FOR UPDATE lock, commit/rollback, and reliable release.
-This serializes the single consultant's schedule writes; future booking writes must
-participate in the same protocol. No advisory locks, ORM, or additional infrastructure.
-
-`npm test` includes pure date/grid/window/DST tests. `npm run test:db` includes real
-PostgreSQL schedule/API tests, rollback tests, concurrent duplicate blocks, and an
-observed row-lock wait proving validation uses the hours committed while waiting.
-Booking-versus-booking and booking-versus-block HTTP races remain Milestone 4 work.
-
-For browser verification in this prepared workspace, a synthetic consultant was
-created through the existing controlled seed. Its private credentials are in ignored
-`.local/availability-demo.env`. Do not commit or publish that file. The demo schedule
-has Thursday 09:00–10:00 in Asia/Karachi; other days are unavailable. Browser test
-blocks were removed and no booking was created. Other checkouts must create their
-own consultant using the documented seed command.
+Milestone development is complete for local delivery. Public deployment requires the
+explicit configuration and verification steps in deploy/README.md. No deployment
+address or shared demo credentials are published.
