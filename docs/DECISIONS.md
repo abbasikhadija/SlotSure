@@ -153,3 +153,31 @@
 **Reasoning:** Native date and half-hour select controls suffice. The same response drives the actual shared picker. Provider schedule mutations remount the picker to refresh current hours and occupancy; successful blocking refreshes its date and the block list.
 
 **Trade-off:** Changing weekly hours or unblocking resets the consultant picker to today. Other browser tabs require refresh for changed availability; no live-update infrastructure was added.
+
+## Milestone 4 — Booking engine (2026-10-22)
+
+**Decision:** Reuse the consultant-row transaction lock for customer booking and
+share assertSlotAvailable with provider blocking. Parse time/window rules after
+acquiring the lock, derive ownership from the authenticated customer, and use the
+same checked-out pg client for validation and INSERT. Return confirmation only
+after COMMIT. Preserve the original error on rollback failure and discard that
+client. Keep the existing partial unique index as a final booking safeguard.
+
+**Reasoning:** An availability response is a snapshot. Locking all schedule writers
+makes their validation and mutation sequential, including cross-table block races.
+A unique booking index alone cannot coordinate bookings with blocked_slots or hours
+changes. This uses existing schema and dependencies; no migration or ORM is needed.
+Real HTTP tests observe both contenders waiting on PostgreSQL locks before release.
+They verify one 201, one 409, and one confirmed row, plus booking-versus-block races.
+A deferred constraint trigger proves commit failure rolls back without confirmation.
+
+**Alternative:** Persistent idempotency tokens could replay a successful response
+following a lost connection. For this milestone use a synchronous UI submission
+guard plus server conflicts. This prevents duplicates but cannot recover a lost
+response; the UI warns about uncertain outcomes and never retries POST automatically.
+
+**Decision:** Keep confirmation in the account-keyed slot picker, with accessible
+heading focus and server-supplied consultant/time/reference/status. Unmount aborts
+pending requests. The SS-prefixed database ID is a display reference, not a secret
+or authorization token. Reload loses the displayed response, while the reservation
+persists. Booking history/recovery and PDFs remain later milestones.

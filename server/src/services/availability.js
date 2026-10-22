@@ -52,6 +52,30 @@ async function dayState(db, day) {
   return rows[0];
 }
 
+// Both booking and blocking validate against the same current schedule, using
+// their checked-out transaction client after acquiring the consultant-row lock.
+export async function assertSlotAvailable(db, start) {
+  const state = await dayState(db, start.startOf('day'));
+  if (overlaps(start, state.booked))
+    throw new HttpError(
+      409,
+      'BOOKING_CONFLICT',
+      'This appointment is already booked. Existing reservations were not changed.',
+    );
+  if (overlaps(start, state.blocked))
+    throw new HttpError(
+      409,
+      'BLOCK_CONFLICT',
+      'This appointment is already blocked.',
+    );
+  if (!fitsHours(start, state.hours))
+    throw new HttpError(
+      400,
+      'OUTSIDE_HOURS',
+      'Choose an appointment within the current working hours.',
+    );
+}
+
 export function createAvailabilityService({
   pool,
   timeZone,
@@ -116,25 +140,7 @@ export function createAvailabilityService({
       return withScheduleLock(pool, async (client) => {
         // Time/window and schedule checks happen after waiting for the lock.
         const start = parseSlot(body, timeZone, now());
-        const state = await dayState(client, start.startOf('day'));
-        if (overlaps(start, state.booked))
-          throw new HttpError(
-            409,
-            'BOOKING_CONFLICT',
-            'This appointment is already booked. Existing reservations were not changed.',
-          );
-        if (overlaps(start, state.blocked))
-          throw new HttpError(
-            409,
-            'BLOCK_CONFLICT',
-            'This appointment is already blocked.',
-          );
-        if (!fitsHours(start, state.hours))
-          throw new HttpError(
-            400,
-            'OUTSIDE_HOURS',
-            'Choose an appointment within the current working hours.',
-          );
+        await assertSlotAvailable(client, start);
         const { rows } = await client.query(
           'INSERT INTO blocked_slots (starts_at) VALUES ($1) RETURNING id, starts_at',
           [start.toUTC().toISO()],

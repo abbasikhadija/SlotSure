@@ -2,11 +2,32 @@
 
 Book your time. No clashes, no confusion.
 
+## Milestone 4 booking workflow
+
+Sign in as a customer, select an available date/time, and choose **Book consultation**.
+Confirmation shows consultant, date, time, duration, reference, and status. Conflicts
+clear the selection and refresh availability. A synchronous submission guard prevents
+double clicks; repeated requests for an occupied slot return 409.
+
+POST `/api/bookings` accepts only `{ "startsAt": "2026-10-29T09:30:00+05:00" }`
+(use a future in-window available time). It requires customer authentication and CSRF.
+The server derives ownership, validates after acquiring the consultant lock, inserts
+inside the transaction, and returns 201 only after commit. The `booking` response has
+id, reference, consultantName, startsAt, endsAt, durationMinutes, timeZone, and status.
+Invalid input returns 400; authentication/role failures return 401/403; occupied times
+return 409. Booking read, cancellation, and PDF endpoints belong to later milestones.
+
+Confirmation is held in page memory; reload loses the displayed confirmation but
+retains the reservation. Keep the reference. On uncertain network/server failure, the
+UI warns that the booking may have saved and does not automatically retry. Persistent
+idempotency keys and confirmation recovery are not implemented. Booking history is
+Milestone 5. Historical read-only selection descriptions below are superseded here.
+
 SlotSure will help independent consultants and their customers replace manual scheduling messages with reliable appointment booking. The MVP is limited to one consultant, registered customers, one consultation type, 30-minute appointments, and a 14-day booking window.
 
 ## Current status
 
-Milestone 3 availability management is implemented: consultant weekly hours, individual blocks/unblocking, time-zone-aware availability, and customer date/time selection. Customer authentication and PostgreSQL-backed sessions remain available. Booking, cancellations, and PDF confirmations are planned; selecting a time does not reserve it.
+Milestone 4 booking is implemented: authenticated customers can reserve available appointments and receive confirmation. Consultant hours, blocks, authentication, and PostgreSQL sessions remain available. Selection alone does not reserve a time. Booking history, cancellation, and PDFs are later milestones.
 
 Read [PROJECT_SPEC.md](PROJECT_SPEC.md) for requirements and [context.md](context.md) for the verified handoff.
 
@@ -56,7 +77,7 @@ npm run dev:client
 
 Configure the session secret and apply migrations using the authentication setup instructions below before starting the API. Open [SlotSure locally](http://127.0.0.1:5173) to register or sign in. API liveness is also available at [the health endpoint](http://127.0.0.1:3000/api/health). Liveness does not check PostgreSQL; use `db:check` for that.
 
-`PORT` defaults to 3000 and `HOST` to `127.0.0.1`; if changing the API port, update `client/vite.config.js` too. `CONSULTANT_TIME_ZONE` defaults to `Asia/Karachi` and is validated as an IANA zone. Appointment-time behavior is deferred. The backend reads `server/.env`; exported environment variables take precedence. No frontend environment file is needed.
+`PORT` defaults to 3000 and `HOST` to `127.0.0.1`; if changing the API port, update `client/vite.config.js` too. `CONSULTANT_TIME_ZONE` defaults to `Asia/Karachi` and is validated as an IANA zone. Appointments use this consultant time zone. The backend reads `server/.env`; exported environment variables take precedence. No frontend environment file is needed.
 
 ### Instance prepared in this workspace
 
@@ -93,13 +114,13 @@ Use `npm run format` to format authored files. `PROJECT_SPEC.md` is preserved un
 
 ## Planned database and reliability
 
-Migrations implement users, weekly hours, blocked slots, bookings, and PostgreSQL sessions. Confirmed bookings use a partial unique index on start times. Availability mutations now acquire a transaction-scoped lock on the consultant row, then recheck schedule-dependent rules on the same checked-out client. Future booking and cancellation mutations must use that protocol too. Full booking concurrency verification belongs to Milestone 4.
+Migrations implement users, weekly hours, blocked slots, bookings, and PostgreSQL sessions. Confirmed bookings use a partial unique index on start times. Availability mutations now acquire a transaction-scoped lock on the consultant row, then recheck schedule-dependent rules on the same checked-out client. Booking mutations now use that protocol too, verified by real PostgreSQL HTTP races. Future cancellation mutations must also participate.
 
 ## Limitations
 
-No booking/cancellation APIs, PDFs, deployment, or distributed default demo credentials exist yet. Authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No deployment link is available.
+No booking history/cancellation APIs, PDFs, deployment, or distributed default demo credentials exist yet. Authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No deployment link is available.
 
-See [engineering decisions](docs/DECISIONS.md). Milestone 4 requires explicit authorization.
+See [engineering decisions](docs/DECISIONS.md). Milestone 5 requires explicit authorization.
 
 ## Milestone 1 database setup
 
@@ -185,7 +206,7 @@ password recovery, MFA, and appointment functionality are outside this milestone
 
 Run `npm run test:db` for both schema and HTTP authentication integration tests
 against real PostgreSQL. Run `npm test` for validation/configuration/foundation tests;
-the three integration suites are explicitly skipped there unless TEST_DATABASE_URL is
+the four integration suites are explicitly skipped there unless TEST_DATABASE_URL is
 exported. No mock session store is substituted for PostgreSQL.
 
 ## Milestone 3 availability workflow

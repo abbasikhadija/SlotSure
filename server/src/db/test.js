@@ -11,6 +11,7 @@ if (!process.env.TEST_DATABASE_URL) {
       'tests/database.test.js',
       'tests/auth.test.js',
       'tests/availability.test.js',
+      'tests/bookings.test.js',
     ],
     { stdio: 'inherit', env: process.env },
   );

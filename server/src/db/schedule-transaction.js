@@ -2,24 +2,29 @@ import { HttpError } from '../http-error.js';
 
 export async function withScheduleLock(pool, operation) {
   const client = await pool.connect();
+  let releaseError;
   try {
     await client.query('BEGIN');
-    const { rowCount } = await client.query(
-      "SELECT id FROM users WHERE role='consultant' FOR UPDATE",
+    const { rows } = await client.query(
+      "SELECT id, name FROM users WHERE role='consultant' FOR UPDATE",
     );
-    if (!rowCount)
+    if (!rows.length)
       throw new HttpError(
         503,
         'CONSULTANT_UNAVAILABLE',
         'The consultant account is not configured yet.',
       );
-    const result = await operation(client);
+    const result = await operation(client, rows[0]);
     await client.query('COMMIT');
     return result;
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      releaseError = rollbackError;
+    }
     throw error;
   } finally {
-    client.release();
+    client.release(releaseError);
   }
 }

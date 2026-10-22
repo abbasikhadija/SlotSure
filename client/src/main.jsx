@@ -224,7 +224,10 @@ function App() {
         (user?.role === 'consultant' ? (
           <ConsultantAvailability key={user.id} />
         ) : (
-          <SlotPicker key={user?.id ?? 'visitor'} />
+          <SlotPicker
+            key={user?.id ?? 'visitor'}
+            customer={user?.role === 'customer'}
+          />
         ))}
       <footer>SlotSure / Built around your time.</footer>
     </main>

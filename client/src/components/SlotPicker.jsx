@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { slotLabel, appointmentLabel } from '../lib/schedule.js';
+import { BookingConfirmation } from './BookingConfirmation.jsx';
 
-export function SlotPicker({ consultant = false, onBlocked }) {
+export function SlotPicker({
+  consultant = false,
+  customer = false,
+  onBlocked,
+}) {
   const [date, setDate] = useState('');
   const [data, setData] = useState(null);
   const [selected, setSelected] = useState('');
@@ -11,6 +16,10 @@ export function SlotPicker({ consultant = false, onBlocked }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const [confirmation, setConfirmation] = useState(null);
+  const submitting = useRef(false);
+  const bookingRequest = useRef(null);
+  useEffect(() => () => bookingRequest.current?.abort(), []);
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
@@ -35,11 +44,47 @@ export function SlotPicker({ consultant = false, onBlocked }) {
   }, [date, refresh]);
 
   function reload() {
+    setConfirmation(null);
     setLoading(true);
     setSelected('');
     setError('');
     setMessage('');
     setRefresh((value) => value + 1);
+  }
+  async function book() {
+    if (!selected || submitting.current) return;
+    submitting.current = true;
+    const controller = new AbortController();
+    bookingRequest.current = controller;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const result = await api('/api/bookings', {
+        method: 'POST',
+        body: { startsAt: selected },
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) {
+        setConfirmation(result.booking);
+        setSelected('');
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setSelected('');
+      setLoading(true);
+      setRefresh((value) => value + 1);
+      setError(
+        error.status === undefined || error.status >= 500
+          ? `We could not confirm the outcome for ${appointmentLabel(selected, data.timeZone)}. Your booking may have been saved. Contact the consultant before trying again.`
+          : error.status === 401
+            ? 'Please sign in again before booking. Reload this page to refresh your account.'
+            : `${error.message} Refresh available times and select again.`,
+      );
+    } finally {
+      submitting.current = false;
+      if (!controller.signal.aborted) setBusy(false);
+    }
   }
   async function block() {
     if (!selected || busy) return;
@@ -67,6 +112,10 @@ export function SlotPicker({ consultant = false, onBlocked }) {
   const hasData = data && !loading && !error && (!date || data.date === date);
   const current =
     hasData && data.slots.find((slot) => slot.startsAt === selected);
+  if (confirmation)
+    return (
+      <BookingConfirmation booking={confirmation} onChooseAnother={reload} />
+    );
   return (
     <section
       className="schedule-card"
@@ -143,10 +192,13 @@ export function SlotPicker({ consultant = false, onBlocked }) {
             <button type="button" onClick={block} disabled={busy}>
               {busy ? 'Blocking…' : 'Block selected time'}
             </button>
+          ) : customer ? (
+            <button type="button" disabled={busy} onClick={book}>
+              {busy ? 'Booking…' : 'Book consultation'}
+            </button>
           ) : (
             <p className="note">
-              This time is selected, but no reservation has been made. Booking
-              will be available soon.
+              Sign in or create an account above to reserve a consultation.
             </p>
           )}
         </div>

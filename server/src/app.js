@@ -7,6 +7,8 @@ import { requireUser, requireConsultant } from './middleware/auth.js';
 import { HttpError, errorHandler } from './http-error.js';
 import { createAvailabilityService } from './services/availability.js';
 import { providerAvailabilityRouter } from './routes/availability.js';
+import { createBookingService } from './services/bookings.js';
+import { bookingsRouter } from './routes/bookings.js';
 
 export function createApp({ pool, config, sessionSchema = 'public' }) {
   const app = express();
@@ -77,6 +79,16 @@ export function createApp({ pool, config, sessionSchema = 'public' }) {
   });
   app.get('/api/availability', async (req, res) =>
     res.json(await availability.availability(req.query.date)),
+  );
+  app.use(
+    '/api/bookings',
+    bookingsRouter({
+      pool,
+      service: createBookingService({
+        pool,
+        timeZone: config.timeZone ?? 'Asia/Karachi',
+      }),
+    }),
   );
   app.use(
     '/api/provider',

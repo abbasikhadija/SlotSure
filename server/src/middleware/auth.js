@@ -24,3 +24,13 @@ export function requireConsultant(req, _res, next) {
     );
   next();
 }
+
+export function requireCustomer(req, _res, next) {
+  if (req.user.role !== 'customer')
+    throw new HttpError(
+      403,
+      'FORBIDDEN',
+      'Only customer accounts can book consultations.',
+    );
+  next();
+}

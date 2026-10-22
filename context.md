@@ -1,3 +1,78 @@
+# Milestone 4 handoff — 2026-10-22 (Asia/Karachi)
+
+## Current milestone and boundaries
+
+**Milestone 4 — Booking Engine: implementation complete; PostgreSQL verification passed. STOPPED.**
+This supersedes historical handoffs below. Resumed after a usage interruption;
+read PROJECT_SPEC.md, AGENTS.md, context.md, decisions and Git changes before edits.
+Preserved the existing interrupted implementation rather than restarting it.
+Milestone 5 has not begun. No commit or push was performed.
+
+## Implementation and decisions
+
+- POST /api/bookings requires a current authenticated customer and session CSRF.
+  Accepts only startsAt; owner, duration and status are server-controlled.
+- Booking uses the existing consultant-row FOR UPDATE transaction protocol and
+  shared availability validator. Current time, grid, 14-date window, hours, blocks
+  and confirmed occupancy are checked after waiting, on the transaction client.
+- Parameterized INSERT; confirmed partial unique index remains defense in depth.
+  Conflicts return 409, invalid input 400, authentication/role failures 401/403.
+  Response is returned only after COMMIT. Rollback failure discards the client
+  without replacing the original error. No dependencies or migrations added.
+- Customer picker submits a booking, guards repeated clicks, refreshes on conflict,
+  and shows consultant/date/time/zone/duration/reference/status confirmation.
+  Account changes unmount the picker and abort its pending request. Uncertain
+  network/server outcomes warn before retry; no automatic repeat POST.
+- New real PostgreSQL booking suite covers authorization/CSRF, ownership, input,
+  persistence, duplicates, two authenticated customer races, booking/block races,
+  newly committed hours, time advancing during lock wait, commit-time rollback,
+  and rebooking alongside canceled historical fixtures. No cancellation API added.
+- See docs/DECISIONS.md and README.md for contracts and engineering trade-offs.
+
+## Commands and actual results
+
+- npm test: PASS, 9 passed, 0 failed, 4 database integration suites explicitly skipped.
+- Initial resumed npm run test:db: FAILED, local PostgreSQL stopped (ECONNREFUSED).
+  Restarted existing ignored .local/postgres using the README pg_ctl command.
+- npm run test:db after restart: PASS, 41 passed, 0 failed, 0 skipped against real
+  PostgreSQL 18.1. Observed two customer lock waiters, exactly one 201/one 409 and
+  one confirmed row. Booking versus block cannot both succeed. Commit failure
+  leaves zero rows and a subsequent request succeeds.
+- npm run lint: PASS. An earlier no-useless-assignment test warning was corrected.
+- npm run build: PASS, Vite production output, 20 modules.
+- npm run format:check: PASS after final documentation formatting.
+- git diff --check: PASS; only Git's configured LF/CRLF notices. Ignored server/.env
+  and .local fixture files verified with git check-ignore; neither is tracked.
+- Browser booking confirmation/conflict journey: NOT VERIFIED. Resumed in-app
+  browser attempts timed out connecting to local Vite; CLI fixture API also timed
+  out. Previous browser progress reached customer selection before interruption.
+  Do not claim a successful browser booking or screenshot.
+- Temporary synthetic block from interrupted browser work was cleaned by exact
+  recorded id AND timestamp using parameterized SQL after API timeout. Development
+  database count then: 0 blocks, 0 bookings. No customer/consultant data removed.
+
+## Files and local state
+
+New: server/src/services/bookings.js, server/src/routes/bookings.js,
+server/tests/bookings.test.js, client/src/components/BookingConfirmation.jsx.
+Updated: app wiring, customer middleware, shared availability validation and lock
+helper, DB test runner, SlotPicker, main.jsx, styles.css, README, decisions, context.
+Ignored environment/credentials preserved. Local PostgreSQL runs on port 55432;
+API/Vite start commands were attempted on 3000/5173 but browser connectivity was
+unavailable. Do not assume development listeners remain healthy after this session.
+No Node 24, deployed HTTPS, mobile-width or production browser verification run.
+
+## Remaining limitations and immediate next step
+
+No known failing automated checks. Browser end-to-end confirmation remains unverified.
+Confirmation is page-memory only: reload loses the screen, not the saved booking.
+No persistent idempotency response recovery. Booking history, cancellation, and PDFs
+remain outside Milestone 4. Keep the one-consultant, 30-minute, 14-date MVP boundary.
+Next authorized milestone would be Milestone 5 — Booking Management; await user
+instruction and do not begin it automatically.
+
+---
+
 # Milestone 3 handoff — 2026-10-22 (Asia/Karachi)
 
 ## Current milestone and boundaries
