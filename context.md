@@ -1,3 +1,31 @@
+# Daily availability correction — 2026-10-22
+
+User requested multiple available appointments every day. Initial Git status clean.
+Inspected specification, agent instructions, historical context, decisions and slot/
+availability services. Root cause was persisted demo configuration: Thursday only,
+09:00–10:00 Asia/Karachi; today's interval had already passed. No window algorithm bug.
+
+Updated the configured development database through createAvailabilityService.setHours
+(existing validation and consultant-row transaction lock): all seven weekdays now
+09:00–18:00 Asia/Karachi. No source/schema/dependency changes, no new milestone.
+Previous hours saved privately in ignored .local/hours-before-daily-fix.json.
+All three canceled booking records were compared before/after and remain unchanged;
+there were no blocks or confirmed bookings to remove. No credentials printed.
+
+Verification: inline Node script using server/.env and real PostgreSQL checked all
+14 current dates (2026-10-22 through 2026-11-04): today 9 future slots, each remaining
+date 18 slots. Asserted multiple slots per date, 30-minute duration, future starts,
+and unchanged booking records. Live GET /api/availability?date=2026-10-23 on API port
+3000 returned 18 slots with Asia/Karachi. npm run test:db: 53 passed, 0 failed,
+0 skipped on real PostgreSQL. No browser verification performed in this correction.
+
+Refresh the booking page to read updated hours. No restart/reseed required. Hours
+remain consultant-editable; bookings, blocks, closed days and elapsed times can
+legitimately reduce future availability. These are local database settings, not
+hard-coded defaults for every installation. No commit or push performed. STOPPED.
+
+---
+
 # Milestone 8 handoff — 2026-10-22 (Asia/Karachi)
 
 ## Final status and boundaries
