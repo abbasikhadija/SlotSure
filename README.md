@@ -2,6 +2,34 @@
 
 Book your time. No clashes, no confusion.
 
+## Milestone 5 booking management
+
+Signed-in customers have **My bookings**; consultants have **Consultant appointments**.
+Upcoming lists future confirmed appointments in time order. History includes past
+appointments and canceled reservations. Customers see only their own records;
+consultants also see the customer's name/email. Dates include the year and use the
+consultant's configured time zone.
+
+- GET `/api/bookings/my`: customer-only booking list.
+- GET `/api/provider/bookings`: consultant-only booking list.
+- Both accept `view=upcoming` (default) or `view=history`, and `page=1` (default,
+  range 1–9999). Responses contain bookings, view, page, hasMore, and timeZone.
+  Each page contains at most 50 records. Refresh if records move between pages
+  while another request changes the schedule.
+- PATCH `/api/bookings/:id/cancel`: JSON `{}`, authenticated customer owner or
+  consultant, with the existing session CSRF token. Returns 200 with the booking.
+  Foreign and missing records both return 404. Invalid identifiers/body return 400. Confirmed appointments at or before their start return 409 for both roles.
+
+Cancellation changes status and canceledAt; it never deletes a reservation. Repeat
+requests return the existing canceled state without changing its timestamp. Current
+ownership and future eligibility are checked after acquiring the schedule lock.
+The list response supplies canCancel, but the backend always validates again.
+Canceled times reappear only when current hours, blocks, and other bookings permit.
+The UI refreshes bookings and availability after cancellation; successful booking
+refreshes the dashboard. An account change aborts old dashboard requests.
+
+Reloaded bookings can now be found in the dashboard. PDFs remain Milestone 6.
+
 ## Milestone 4 booking workflow
 
 Sign in as a customer, select an available date/time, and choose **Book consultation**.
@@ -15,19 +43,20 @@ The server derives ownership, validates after acquiring the consultant lock, ins
 inside the transaction, and returns 201 only after commit. The `booking` response has
 id, reference, consultantName, startsAt, endsAt, durationMinutes, timeZone, and status.
 Invalid input returns 400; authentication/role failures return 401/403; occupied times
-return 409. Booking read, cancellation, and PDF endpoints belong to later milestones.
+return 409. Booking reads and cancellation are available as described above; PDF
+endpoints remain a later milestone.
 
 Confirmation is held in page memory; reload loses the displayed confirmation but
 retains the reservation. Keep the reference. On uncertain network/server failure, the
 UI warns that the booking may have saved and does not automatically retry. Persistent
-idempotency keys and confirmation recovery are not implemented. Booking history is
-Milestone 5. Historical read-only selection descriptions below are superseded here.
+idempotency keys are not implemented. Reloaded reservations are available in My
+bookings. Historical read-only selection descriptions below are superseded here.
 
 SlotSure will help independent consultants and their customers replace manual scheduling messages with reliable appointment booking. The MVP is limited to one consultant, registered customers, one consultation type, 30-minute appointments, and a 14-day booking window.
 
 ## Current status
 
-Milestone 4 booking is implemented: authenticated customers can reserve available appointments and receive confirmation. Consultant hours, blocks, authentication, and PostgreSQL sessions remain available. Selection alone does not reserve a time. Booking history, cancellation, and PDFs are later milestones.
+Milestone 5 booking management is implemented: customers review their own appointments and cancel future bookings; consultants review and cancel future customer bookings. Canceled history is preserved. Booking, availability management, authentication, and PostgreSQL sessions remain available. PDFs are the next milestone.
 
 Read [PROJECT_SPEC.md](PROJECT_SPEC.md) for requirements and [context.md](context.md) for the verified handoff.
 
@@ -114,13 +143,13 @@ Use `npm run format` to format authored files. `PROJECT_SPEC.md` is preserved un
 
 ## Planned database and reliability
 
-Migrations implement users, weekly hours, blocked slots, bookings, and PostgreSQL sessions. Confirmed bookings use a partial unique index on start times. Availability mutations now acquire a transaction-scoped lock on the consultant row, then recheck schedule-dependent rules on the same checked-out client. Booking mutations now use that protocol too, verified by real PostgreSQL HTTP races. Future cancellation mutations must also participate.
+Migrations implement users, weekly hours, blocked slots, bookings, and PostgreSQL sessions. Confirmed bookings use a partial unique index on start times. Availability mutations now acquire a transaction-scoped lock on the consultant row, then recheck schedule-dependent rules on the same checked-out client. Booking mutations now use that protocol too, verified by real PostgreSQL HTTP races. Cancellation mutations now use the same lock protocol and are verified by real PostgreSQL races.
 
 ## Limitations
 
-No booking history/cancellation APIs, PDFs, deployment, or distributed default demo credentials exist yet. Authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No deployment link is available.
+No PDFs, deployment, or distributed default demo credentials exist yet. Authentication excludes email verification and password recovery; this MVP will not be presented as a production-ready commercial identity system. Public demonstrations must use synthetic data. No deployment link is available.
 
-See [engineering decisions](docs/DECISIONS.md). Milestone 5 requires explicit authorization.
+See [engineering decisions](docs/DECISIONS.md). Milestone 6 requires explicit authorization.
 
 ## Milestone 1 database setup
 

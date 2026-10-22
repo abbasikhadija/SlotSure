@@ -181,3 +181,49 @@ heading focus and server-supplied consultant/time/reference/status. Unmount abor
 pending requests. The SS-prefixed database ID is a display reference, not a secret
 or authorization token. Reload loses the displayed response, while the reservation
 persists. Booking history/recovery and PDFs remain later milestones.
+
+## 2026-10-22 — Milestone 5 booking management
+
+**Decision:** Add one management service for customer/provider lists and the shared
+PATCH cancellation endpoint. Enforce ownership in SQL; foreign and missing IDs both
+return 404. Read the current actor role again after acquiring the consultant lock.
+Cancel only future confirmed appointments for either role; past records are history.
+Repeated cancellation returns 200 with the original canceledAt, even after the start.
+
+**Problem:** Release a reservation safely without losing history, granting access to
+another customer, or racing with booking/block/hour mutations.
+
+**Alternatives:** Hard deletion, separate provider cancellation logic, or rejecting
+all repeat cancellations as conflicts.
+
+**Reasoning:** Updating confirmed to canceled preserves the existing schema and
+partial unique index semantics. The shared lock orders all schedule writers; time
+is checked after waiting. Timestamp uses clock_timestamp bounded below by created_at.
+Response returns only after commit. PostgreSQL tests verify authorization, lock waits,
+repeat cancellation, rebooking/block races, and rollback after a deferred commit failure.
+
+**Trade-off:** All consultant writes serialize. Both roles are deliberately prohibited
+from rewriting past confirmed appointments. There is no cancellation deadline beyond
+appointment start, notification, refund, or new status. No new dependency or migration.
+
+**Decision:** Serve upcoming/history views with deterministic starts_at/id ordering,
+50-record pages, validated page numbers (1–9999), and a 51st-row hasMore probe. Customer
+responses omit customer identity; consultant responses include name/email for actual
+appointment management. Use one React dashboard with abortable reads/mutations,
+server-derived canCancel, disabled repeat submission, and visible feedback.
+
+**Problem:** History can grow indefinitely and stale browser responses must not expose
+previous-account bookings or leave availability occupied after cancellation.
+
+**Alternatives:** An unbounded list, cursor tokens, a frontend router/state dependency,
+or live updates across browser tabs.
+
+**Reasoning:** Bounded offset pagination and React state suffice for this small MVP.
+Dashboard refreshes after booking; cancellation refreshes dashboard and availability,
+including uncertain outcomes. Account-keyed unmount aborts old requests. Year is added
+to appointment labels so historical dates are unambiguous.
+
+**Trade-off:** Concurrent changes can shift offset pages; refresh to reconcile. The
+availability remount resets selections and provider unsaved hours drafts. Other tabs
+need manual refresh. Full visual verification was unavailable (local browser timeout);
+real HTTP/database behavior and the production bundle were verified.

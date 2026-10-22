@@ -7,6 +7,7 @@ export function SlotPicker({
   consultant = false,
   customer = false,
   onBlocked,
+  onBooked,
 }) {
   const [date, setDate] = useState('');
   const [data, setData] = useState(null);
@@ -68,6 +69,7 @@ export function SlotPicker({
       if (!controller.signal.aborted) {
         setConfirmation(result.booking);
         setSelected('');
+        onBooked?.();
       }
     } catch (error) {
       if (controller.signal.aborted) return;

@@ -13,6 +13,7 @@ export function appointmentLabel(instant, timeZone) {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
+    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
     timeZoneName: 'shortOffset',

@@ -1,3 +1,92 @@
+# Milestone 5 handoff — 2026-10-22 (Asia/Karachi)
+
+## Current status and boundaries
+
+**Milestone 5 — Booking Management: implemented and verified through real HTTP and
+PostgreSQL tests. STOPPED.** This section supersedes the retained historical handoffs.
+Read PROJECT_SPEC.md, AGENTS.md, context.md and decisions before edits; initial Git
+status was clean. Existing Milestone 4 implementation was preserved. No commits/pushes.
+Milestone 6 (PDF) has not begun. MVP remains one consultant, customers, one type,
+30-minute appointments, 14 consultant-local booking dates; same JS/React/Vite/Express/pg
+stack, ignored environment files and existing schema. No dependencies/migrations added.
+
+## Implemented architecture and API
+
+- New server/src/services/booking-management.js handles listing and cancellation.
+- GET /api/bookings/my: authenticated customer only; SQL filters authenticated owner.
+- GET /api/provider/bookings: consultant only, includes customer name/email.
+- Both accept only view=upcoming|history (default upcoming) and page=1..9999 (default 1).
+  Upcoming = future confirmed, sorted starts_at/id ascending. History = canceled OR
+  started/past, sorted descending. At most 50 rows returned, one extra row for hasMore.
+  Response: bookings, view, page, hasMore, timeZone. Booking fields: id, reference,
+  consultantName, startsAt, endsAt, durationMinutes, timeZone, status, canceledAt,
+  canCancel; provider list additionally includes customer name/email. No password data.
+- PATCH /api/bookings/:id/cancel: authenticated customer owner or consultant; JSON {},
+  existing CSRF/origin/JSON protections. Validate decimal positive bigint; foreign and
+  missing records share 404. Recheck current role/ownership/time after consultant lock.
+  Future confirmed -> canceled with timestamp, 200 only after COMMIT. Started/past
+  confirmed -> 409 BOOKING_STARTED for both roles. Repeated cancellation -> 200,
+  unchanged timestamp, including after appointment start. Never delete history.
+- Reuses withScheduleLock and parameterized SQL. Same schedule lock orders booking,
+  cancellation, blocks and hours. Existing confirmed partial unique index allows
+  rebooking while retaining canceled rows. Current hours/blocks still determine whether
+  cancellation makes the time publicly available.
+- New BookingDashboard.jsx serves both roles: Upcoming/History, refresh, pagination,
+  cancellation feedback/disabled duplicate submissions, server-derived eligibility.
+  Account-keyed unmount aborts requests. Main refresh revisions connect successful
+  booking to dashboard and cancellation outcomes to dashboard/availability. Picker
+  callback added without losing successful confirmation. Labels now include year.
+- README and docs/DECISIONS.md document contracts, policy, and trade-offs.
+
+## Commands and actual verification results
+
+- Formatted only changed source/docs using installed Prettier.
+- npm run test:db: PASS, 50 tests, 0 failed, 0 skipped, real PostgreSQL 18.1.
+  Added nine management subtests to existing booking HTTP suite, reusing real
+  authenticated sessions and isolated per-run schema. All existing suites still pass.
+  Coverage: customer/provider reads, foreign/missing privacy, current owner permissions,
+  anonymous/CSRF/role rejection, malformed IDs/body/query, bounded pagination,
+  past/started rejection, timestamp-preserving repeats, history, availability release,
+  rebooking, simultaneous owner/provider cancellation, cancellation versus rebooking
+  and block races, time advancing while a lock waits, commit-failure rollback/retry,
+  and unavailable canceled times when blocked or outside hours.
+- npm run lint: PASS.
+- Initial sandbox npm test: FAILED, foundation HTTP fetch blocked by loopback access
+  (8 passed, 1 failed, 4 skipped). Reran with required escalation; no source workaround.
+- Escalated npm test: PASS, 9 passed, 0 failed, 4 DB integration suites explicitly
+  skipped. Mandatory DB command above separately ran them against PostgreSQL.
+- npm run build: PASS, Vite 8.3.5, 21 modules, production bundle generated.
+- Browser attempt: NOT VERIFIED. In-app browser opening http://127.0.0.1:5173 timed
+  out (ERR_CONNECTION_TIMED_OUT), consistent with prior milestone's local limitation.
+  No successful visual cancellation journey or screenshot claimed.
+- npm run format:check: PASS after documentation updates.
+- git diff --check: PASS; only configured LF/CRLF notices. git check-ignore confirms
+  server/.env and .local remain ignored; git ls-files returns neither path.
+
+## Files changed
+
+New: server/src/services/booking-management.js; client/src/components/BookingDashboard.jsx.
+Modified: server/src/app.js, server/src/routes/bookings.js, server/tests/bookings.test.js;
+client/src/main.jsx, client/src/components/SlotPicker.jsx, client/src/lib/schedule.js,
+client/src/styles.css; README.md, docs/DECISIONS.md, context.md.
+No development data was inserted or removed by this milestone's tests: all new fixtures
+live in the isolated test schema, which is removed after verification. No secrets printed.
+
+## Known limitations and immediate next step
+
+No known failing automated checks. Visual browser workflow remains unverified because
+local browser access timed out. Offset pages may shift as records change; refresh.
+Cancellation refresh remounts availability, resetting selected times and any unsaved
+provider-hours draft. Other tabs require manual refresh. Eligibility in a displayed list
+can age; the server rechecks on submission. Past appointments cannot be canceled by
+either role. Confirmation screen is page-memory only, but persisted reservations can
+now be recovered through My bookings. No persistent booking idempotency response replay.
+Not run: Node 24, deployed HTTPS, mobile-width browser checks. PDFs are not implemented.
+Next step: Milestone 6 — PDF Confirmation, only when explicitly authorized. Do not
+start it automatically. Never commit/push without explicit user authorization.
+
+---
+
 # Milestone 4 handoff — 2026-10-22 (Asia/Karachi)
 
 ## Current milestone and boundaries

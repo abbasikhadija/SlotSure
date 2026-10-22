@@ -9,6 +9,7 @@ import pg from 'pg';
 import { migrate } from '../src/db/migrate.js';
 import { seedConsultant } from '../src/db/seed-consultant.js';
 import { createBookingService } from '../src/services/bookings.js';
+import { createBookingManagement } from '../src/services/booking-management.js';
 import { createApp } from '../src/app.js';
 import { readAuthConfig } from '../src/config.js';
 
@@ -551,6 +552,362 @@ test(
             blocks: 0,
             total: 0,
           });
+        },
+      );
+      const cancel = (account, id, body = {}) =>
+        request(`/api/bookings/${id}/cancel`, {
+          ...account,
+          method: 'PATCH',
+          body,
+        });
+      const managementStart = (hour) =>
+        tomorrow.plus({ days: 1 }).set({ hour, minute: 0 }).toUTC().toISO();
+      const insertBooking = async (customerId, startsAt) =>
+        (
+          await pool.query(
+            'INSERT INTO bookings(customer_id,starts_at) VALUES ($1,$2) RETURNING id',
+            [customerId, startsAt],
+          )
+        ).rows[0].id;
+      const firstManaged = await insertBooking(firstId, managementStart(9));
+      const secondManaged = await insertBooking(secondId, managementStart(10));
+      const pastManaged = await insertBooking(
+        firstId,
+        tomorrow.minus({ days: 2 }).toUTC().toISO(),
+      );
+
+      await t.test(
+        'management reads enforce ownership, role boundaries and bounded validated pages',
+        async () => {
+          assert.equal((await request('/api/bookings/my')).status, 401);
+          assert.equal(
+            (await request('/api/provider/bookings', first)).status,
+            403,
+          );
+          assert.equal((await request('/api/provider/bookings')).status, 401);
+          assert.equal(
+            (await request('/api/bookings/my', consultant)).status,
+            403,
+          );
+          const mine = await request('/api/bookings/my', first);
+          assert.equal(mine.status, 200);
+          assert.ok(
+            mine.data.bookings.some(
+              (b) => b.id === firstManaged && b.canCancel,
+            ),
+          );
+          assert.ok(
+            !mine.data.bookings.some(
+              (b) => b.id === secondManaged || b.id === pastManaged,
+            ),
+          );
+          assert.ok(
+            mine.data.bookings.every(
+              (b) => !b.customer && !b.customer_id && !b.password_hash,
+            ),
+          );
+          assert.deepEqual(
+            mine.data.bookings.map((b) => b.startsAt),
+            mine.data.bookings.map((b) => b.startsAt).sort(),
+          );
+          const provider = await request('/api/provider/bookings', consultant);
+          assert.equal(provider.status, 200);
+          assert.equal(
+            provider.data.bookings.find((b) => b.id === secondManaged).customer
+              .email,
+            'second@example.test',
+          );
+          assert.ok(!JSON.stringify(provider.data).includes('password_hash'));
+          const history = await request('/api/bookings/my?view=history', first);
+          assert.ok(
+            history.data.bookings.some(
+              (b) => b.id === pastManaged && !b.canCancel,
+            ),
+          );
+          for (const query of [
+            'view=all',
+            'page=0',
+            'page=10000',
+            'page=1.5',
+            'page=1&page=2',
+            'customerId=2',
+            'view[x]=history',
+          ])
+            assert.equal(
+              (await request(`/api/bookings/my?${query}`, first)).status,
+              400,
+            );
+          await pool.query(
+            `INSERT INTO bookings(customer_id,starts_at,status,canceled_at)
+          SELECT $1,$2,'canceled',clock_timestamp() FROM generate_series(1,51)`,
+            [secondId, tomorrow.minus({ days: 3 }).toUTC().toISO()],
+          );
+          const page1 = (await request('/api/bookings/my?view=history', second))
+            .data;
+          const page2 = (
+            await request('/api/bookings/my?view=history&page=2', second)
+          ).data;
+          assert.equal(page1.bookings.length, 50);
+          assert.equal(page1.hasMore, true);
+          assert.equal(page2.hasMore, false);
+          assert.ok(page2.bookings.length > 0);
+          assert.ok(
+            !page2.bookings.some((b) =>
+              page1.bookings.some((a) => a.id === b.id),
+            ),
+          );
+        },
+      );
+      await t.test(
+        'cancellation rejects anonymous, CSRF, forged fields, invalid IDs and another owner without leaking existence',
+        async () => {
+          const anonymous = await request('/api/auth/csrf');
+          assert.equal(
+            (
+              await cancel(
+                { cookie: anonymous.cookie, token: anonymous.data.csrfToken },
+                firstManaged,
+              )
+            ).status,
+            401,
+          );
+          assert.equal(
+            (await cancel({ cookie: first.cookie }, firstManaged)).status,
+            403,
+          );
+          assert.equal((await cancel(second, firstManaged)).status, 404);
+          assert.deepEqual(
+            (await cancel(second, firstManaged)).data,
+            (await cancel(second, '9223372036854775807')).data,
+          );
+          for (const id of [
+            '0',
+            '-1',
+            '1.5',
+            '1e1',
+            '9223372036854775808',
+            'abc',
+          ])
+            assert.equal((await cancel(first, id)).status, 400);
+          assert.equal(
+            (await cancel(first, firstManaged, { customerId: secondId }))
+              .status,
+            400,
+          );
+          assert.equal((await cancel(first, firstManaged, [])).status, 400);
+          assert.equal(
+            (
+              await pool.query('SELECT status FROM bookings WHERE id=$1', [
+                firstManaged,
+              ])
+            ).rows[0].status,
+            'confirmed',
+          );
+        },
+      );
+      await request('/api/provider/hours', {
+        ...consultant,
+        method: 'PUT',
+        body: { hours: week },
+      });
+      const availableManagement = async () =>
+        (
+          await request(
+            `/api/availability?date=${tomorrow.plus({ days: 1 }).toISODate()}`,
+          )
+        ).data.slots.map((s) => s.startsAt);
+      await t.test(
+        'owner cancellation preserves history, releases availability, repeats safely and permits rebooking',
+        async () => {
+          assert.ok(
+            !(await availableManagement()).includes(managementStart(9)),
+          );
+          const result = await cancel(first, firstManaged);
+          assert.equal(result.status, 200);
+          assert.equal(result.data.booking.status, 'canceled');
+          assert.equal(result.data.booking.canCancel, false);
+          assert.ok(result.data.booking.canceledAt);
+          assert.ok((await availableManagement()).includes(managementStart(9)));
+          assert.equal(
+            (await cancel(first, firstManaged)).data.booking.canceledAt,
+            result.data.booking.canceledAt,
+          );
+          const history = (
+            await request('/api/bookings/my?view=history', first)
+          ).data.bookings;
+          assert.ok(
+            history.some(
+              (b) => b.id === firstManaged && b.status === 'canceled',
+            ),
+          );
+          assert.equal((await book(second, managementStart(9))).status, 201);
+          assert.deepEqual(await occupancy(managementStart(9)), {
+            bookings: 1,
+            blocks: 0,
+            total: 2,
+          });
+        },
+      );
+      await t.test(
+        'consultant cancellation and simultaneous repeated cancellation preserve a single historical record',
+        async () => {
+          const results = await race([
+            () => cancel(second, secondManaged),
+            () => cancel(consultant, secondManaged),
+          ]);
+          assert.deepEqual(
+            results.map((r) => r.status),
+            [200, 200],
+          );
+          assert.equal(
+            results[0].data.booking.canceledAt,
+            results[1].data.booking.canceledAt,
+          );
+          assert.equal((await occupancy(managementStart(10))).total, 1);
+          assert.equal((await cancel(first, secondManaged)).status, 404);
+          assert.ok(
+            (
+              await request('/api/provider/bookings?view=history', consultant)
+            ).data.bookings.some((b) => b.id === secondManaged),
+          );
+        },
+      );
+      await t.test(
+        'past bookings reject both roles; repeat cancellation never rewrites history',
+        async () => {
+          assert.equal((await cancel(first, pastManaged)).status, 409);
+          assert.equal((await cancel(consultant, pastManaged)).status, 409);
+          const service = createBookingManagement({
+            pool,
+            timeZone,
+            now: () => tomorrow.plus({ days: 4 }),
+          });
+          const before = (
+            await pool.query('SELECT canceled_at FROM bookings WHERE id=$1', [
+              firstManaged,
+            ])
+          ).rows[0].canceled_at.toISOString();
+          assert.equal(
+            (await service.cancel(firstId, firstManaged, {})).booking
+              .canceledAt,
+            before,
+          );
+        },
+      );
+      await t.test(
+        'cancellation rechecks time after waiting for the consultant lock',
+        async () => {
+          const id = await insertBooking(firstId, managementStart(11));
+          let clock = tomorrow.plus({ days: 1 }).set({ hour: 10 });
+          const service = createBookingManagement({
+            pool,
+            timeZone,
+            now: () => clock,
+          });
+          const holder = await pool.connect();
+          let pending;
+          try {
+            await holder.query('BEGIN');
+            await holder.query(
+              "SELECT id FROM users WHERE role='consultant' FOR UPDATE",
+            );
+            pending = service.cancel(firstId, id, {}).then(
+              (value) => ({ value }),
+              (error) => ({ error }),
+            );
+            await waitForWriters(1);
+            clock = tomorrow.plus({ days: 1 }).set({ hour: 11 });
+            await holder.query('COMMIT');
+            assert.equal((await pending).error.code, 'BOOKING_STARTED');
+          } finally {
+            await holder.query('ROLLBACK');
+            holder.release();
+            if (pending) await pending;
+          }
+          assert.equal(
+            (await pool.query('SELECT status FROM bookings WHERE id=$1', [id]))
+              .rows[0].status,
+            'confirmed',
+          );
+        },
+      );
+      await t.test(
+        'cancellation racing with rebooking or blocking follows the shared schedule protocol',
+        async () => {
+          const id = await insertBooking(firstId, managementStart(12));
+          const bookingRace = await race([
+            () => cancel(first, id),
+            () => book(second, managementStart(12)),
+          ]);
+          assert.equal(bookingRace[0].status, 200);
+          assert.ok([201, 409].includes(bookingRace[1].status));
+          assert.equal(
+            (await occupancy(managementStart(12))).bookings,
+            bookingRace[1].status === 201 ? 1 : 0,
+          );
+          const blockedId = await insertBooking(firstId, managementStart(13));
+          const blockRace = await race([
+            () => cancel(consultant, blockedId),
+            () =>
+              request('/api/provider/blocks', {
+                ...consultant,
+                method: 'POST',
+                body: { startsAt: managementStart(13) },
+              }),
+          ]);
+          assert.equal(blockRace[0].status, 200);
+          assert.ok([201, 409].includes(blockRace[1].status));
+          assert.equal((await occupancy(managementStart(13))).bookings, 0);
+        },
+      );
+      await t.test(
+        'canceled times remain unavailable when blocked or outside current hours',
+        async () => {
+          const blocked = await request('/api/provider/blocks', {
+            ...consultant,
+            method: 'POST',
+            body: { startsAt: managementStart(10) },
+          });
+          assert.equal(blocked.status, 201);
+          assert.equal((await cancel(consultant, secondManaged)).status, 200);
+          assert.ok(
+            !(await availableManagement()).includes(managementStart(10)),
+          );
+          const id = await insertBooking(firstId, managementStart(14));
+          await request('/api/provider/hours', {
+            ...consultant,
+            method: 'PUT',
+            body: { hours: [] },
+          });
+          assert.equal((await cancel(first, id)).status, 200);
+          assert.equal((await availableManagement()).length, 0);
+        },
+      );
+      await t.test(
+        'commit-time cancellation failure rolls back status and timestamp; retry succeeds',
+        async () => {
+          const id = await insertBooking(firstId, managementStart(15));
+          await pool.query(`CREATE FUNCTION reject_test_cancel() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'intentional cancellation commit failure'; END $$;
+          CREATE CONSTRAINT TRIGGER reject_test_cancel AFTER UPDATE ON bookings DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION reject_test_cancel()`);
+          try {
+            const failed = await cancel(first, id);
+            assert.equal(failed.status, 500);
+            assert.equal(failed.data.error.code, 'INTERNAL_ERROR');
+            assert.deepEqual(
+              (
+                await pool.query(
+                  'SELECT status,canceled_at FROM bookings WHERE id=$1',
+                  [id],
+                )
+              ).rows[0],
+              { status: 'confirmed', canceled_at: null },
+            );
+          } finally {
+            await pool.query(
+              'DROP TRIGGER reject_test_cancel ON bookings; DROP FUNCTION reject_test_cancel()',
+            );
+          }
+          assert.equal((await cancel(first, id)).status, 200);
         },
       );
     } finally {

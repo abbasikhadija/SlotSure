@@ -4,6 +4,7 @@ import './styles.css';
 import { api } from './lib/api.js';
 import { SlotPicker } from './components/SlotPicker.jsx';
 import { ConsultantAvailability } from './components/ConsultantAvailability.jsx';
+import { BookingDashboard } from './components/BookingDashboard.jsx';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -12,6 +13,8 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [bookingRevision, setBookingRevision] = useState(0);
+  const [scheduleRevision, setScheduleRevision] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -222,13 +225,25 @@ function App() {
       </div>
       {!loading &&
         (user?.role === 'consultant' ? (
-          <ConsultantAvailability key={user.id} />
+          <ConsultantAvailability key={`${user.id}-${scheduleRevision}`} />
         ) : (
           <SlotPicker
-            key={user?.id ?? 'visitor'}
+            key={`${user?.id ?? 'visitor'}-${scheduleRevision}`}
             customer={user?.role === 'customer'}
+            onBooked={() => setBookingRevision((value) => value + 1)}
           />
         ))}
+      {user && (
+        <BookingDashboard
+          key={user.id}
+          consultant={user.role === 'consultant'}
+          revision={bookingRevision}
+          onChanged={() => {
+            setBookingRevision((value) => value + 1);
+            setScheduleRevision((value) => value + 1);
+          }}
+        />
+      )}
       <footer>SlotSure / Built around your time.</footer>
     </main>
   );
