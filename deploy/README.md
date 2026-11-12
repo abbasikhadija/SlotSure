@@ -1,5 +1,9 @@
 # Deployment runbook
 
+For blitz.cloud use [BLITZ_CLOUD.md](BLITZ_CLOUD.md), which supersedes the generic
+Caddy topology below for that platform. Benchmark instructions are in
+[BENCHMARK.md](BENCHMARK.md).
+
 This configuration is prepared, not deployed. No target host/domain/database or hosting
 credentials were supplied. Caddy is not installed in the verification environment, so
 its template was checked against documentation but not executed. No public URL exists.

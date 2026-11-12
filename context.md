@@ -1,3 +1,69 @@
+# Blitz deployment preparation — 2026-11-12
+
+User explicitly authorized this single deployment-preparation milestone after the
+completed product milestones. Implementation and available local verification are
+complete. STOP after reporting; no commit/push/cloud deployment/settings changes made.
+Read PROJECT_SPEC.md, existing context/decisions and relevant code before edits;
+preserved all domain features, schema migrations, constraints and lock protocol.
+
+Added root multi-stage Node 24/glibc Dockerfile with workspace npm ci, frontend build,
+pruned runtime dependencies, Argon2 hash/verify build probe, font/license retention,
+USER node, port 8080, direct Node CMD and readiness healthcheck. Ignore rules exclude
+secrets/local/test artifacts; named private *.env files are now Git-ignored. Added
+production DB/test-config guards, sanitized startup diagnostics, bounded shutdown,
+separate /api/ready, explicit release.js initialization modes, and real Argon2id seed
+validation with bounded costs. Normal startup never migrates/seeds. No direct dependency
+or migration changed. Lockfile-only body-parser 2.3.0 → 2.4.0 fixes a high runtime
+advisory. Four moderate development ESLint/minimatch advisories remain.
+
+Official Blitz docs reviewed through Firecrawl: root Dockerfile builds, AMD64, 8080,
+encrypted restart-applied env, private managed PostgreSQL 17, start-command override,
+main-address assignment, backups/rollback and free plan limits. Complete proxy topology
+and header-sanitization policy were not documented; TRUST_PROXY remains default 0.
+Public authentication is blocked until safe proxy trust is verified. Do not weaken
+Secure cookies or blindly set 1. Single-part shell/one-off jobs not established;
+runbook supplies an explicit initialize-start command, then restoration of normal CMD
+and removal of seed variables. Prefer confirmed pre-release/admin job where available.
+
+Actual commands on Windows Node 22.14 / npm 10.9.2 / PostgreSQL 18.1:
+
+- npm ci: passed twice, after focused lockfile update as well.
+- npm run lint: passed.
+- npm test: 20 passed, 0 failed, 5 explicit DB skips.
+- npm run test:db: 54 passed, 0 failed, 0 skipped, dedicated slotsure_test and isolated
+  schemas. Includes new real release-start child-process checks for fresh migration,
+  seed repetition/account preservation and migration-only startup; existing auth,
+  concurrency, cancellation, ownership, PDF and migration rollback checks retained.
+- npm run build: passed, Vite 8.3.5, 22 modules.
+- npm audit --omit=dev: zero vulnerabilities after body-parser remediation.
+- Final npm run format:check and git diff --check: passed (Git line-ending notices
+  only). Git ignore checks passed for server/.env, blitz-local.env and .local files;
+  no server/.env or .local paths tracked. Changed-file scan against loaded private
+  database/session/seed values passed across 20 changed/new files without printing
+  values. This source scan does not replace the pending image-layer inspection.
+- docker build --platform linux/amd64 -t slotsure:blitz .: blocked; docker unavailable.
+- No container build/run/restart, Linux signals, Node 24 execution, target PostgreSQL
+  17, real hosted proxy/TLS/browser, image-layer secret scan or load measurement claimed.
+
+Initial DB stopped: restarted existing ignored cluster on 55432. An early direct DB
+test command had the wrong cwd; a later attempt overlapped npm ci and failed module
+imports. Final complete DB suite passed after installation finished. Initial runbook
+format check failed before formatting; final checks recorded below. No production or
+development domain records were altered; test fixtures cleaned their unique schemas.
+
+Full file inventory, results, requirement classifications and risks:
+deploy/VERIFICATION.md. Precise deployment checklist/env/migration/seed/recovery:
+deploy/BLITZ_CLOUD.md. Bounded loopback read-only metrics and synthetic DB/concurrency/
+query/memory instructions: deploy/BENCHMARK.md and server/scripts/benchmark.js.
+No benchmark numbers are claimed. Decisions recorded in docs/DECISIONS.md.
+
+Immediate next step: install/use a Linux AMD64 Docker builder, run the documented
+image/container checks on isolated PostgreSQL, obtain Blitz proxy-policy confirmation,
+then configure the host/domain/secrets and verify real HTTPS journeys. Review and
+explicitly authorize any Git commit/push separately. No new product milestone begun.
+
+---
+
 # Daily availability correction — 2026-10-22
 
 User requested multiple available appointments every day. Initial Git status clean.

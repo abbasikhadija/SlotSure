@@ -40,6 +40,18 @@ export function createApp({
   app.get('/api/health', (_req, res) =>
     res.json({ status: 'ok', service: 'slotsure-api' }),
   );
+  // No session creation, schema changes, or sensitive diagnostics on probes.
+  app.get('/api/ready', async (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      await pool.query('SELECT 1 FROM schema_migrations LIMIT 1');
+      await pool.query('SELECT 1 FROM users LIMIT 1');
+      await pool.query('SELECT 1 FROM user_sessions LIMIT 1');
+      res.json({ status: 'ready' });
+    } catch {
+      res.status(503).json({ status: 'unavailable' });
+    }
+  });
   app.use('/api', (_req, res, next) => {
     res.set('Cache-Control', 'no-store');
     next();

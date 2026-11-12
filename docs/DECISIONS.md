@@ -1,5 +1,45 @@
 # Engineering decisions
 
+## 2026-11-12 — Blitz container deployment preparation
+
+**Decision:** Package existing workspaces in a multi-stage Node 24 Debian slim image
+with npm ci, pruned dependencies, the same glibc base for Argon2, a native hash/verify
+build probe, PDF font/licenses, non-root user, port 8080 and direct Node CMD.
+**Problem:** Generic Caddy delivery lacked a Blitz container build.
+**Alternatives:** Platform-generated recipe, Alpine/musl, separate frontend hosting.
+**Reasoning:** Official Blitz docs establish root Dockerfile detection and AMD64;
+one origin preserves session/CSRF behavior. No new runtime dependency.
+**Trade-off:** Docker is unavailable locally; Linux execution remains unverified.
+Record/pin image digests where exact builds are required; Node 24 tags are mutable.
+
+**Decision:** Keep normal startup free of migrations/seeding. Prefer release/admin
+jobs if confirmed available; add explicit release.js initialize-start/migrate-start
+for Blitz's documented start-command override. Add separate session-free readiness.
+Seed retains singleton ON CONFLICT and validates Argon2id via the actual verifier,
+with bounded parameters. Production configuration rejects test DB names/variables.
+**Problem:** Managed PostgreSQL is private; reviewed docs do not establish a single-part
+shell/one-off administrative job. **Alternatives:** Public seed API or reset-on-start.
+**Reasoning:** Existing tracked transactional migrations preserve data; release setup
+fails before HTTP. Real PostgreSQL child-process tests prove initialization/repetition.
+**Trade-off:** Use one migration runner; restore default CMD and remove seed variables.
+Future rolling changes need backward-compatible SQL or maintenance downtime. No
+existing migration changed. A named benchmark script is loopback-only and bounded.
+
+**Decision:** Preserve TRUST_PROXY default 0 and existing 0/1 validation. Require
+provider confirmation of ingress/header trust before rollout.
+**Problem:** Official docs establish TLS but omit full hop/header topology.
+**Alternatives:** Blind one-hop trust or disabling Secure cookies.
+**Reasoning:** Neither is an acceptable assumption. **Trade-off:** Hosted authentication
+is blocked until verified; implement a different policy if confirmed topology requires it.
+
+**Decision:** Update only locked body-parser 2.3.0 to 2.4.0 within Express's range for
+high-severity GHSA-27r3-jxmh-p828. Production audit reports zero vulnerabilities.
+**Problem:** Fresh npm ci found one high runtime and four moderate tooling advisories.
+**Alternatives:** Unreviewed audit force fix or leaving the runtime issue.
+**Reasoning:** Focused lockfile remediation preserves direct dependency versions.
+**Trade-off:** Four moderate ESLint/minimatch dev advisories need a separate tooling review;
+those dependencies are pruned from the runtime image.
+
 ## 2026-10-21 — Foundation structure and runtime
 
 **Decision:** Use npm workspaces for separate `client` and `server` packages, ordinary JavaScript with ES modules, and Node's built-in environment-file support and test runner. Recommend Node 24 LTS; support the existing Node 22.14 environment.

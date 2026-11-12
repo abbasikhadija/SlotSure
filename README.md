@@ -1,5 +1,9 @@
 # SlotSure
 
+For the container build and deployment to https://khadija.prod.page, follow
+[the Blitz runbook](deploy/BLITZ_CLOUD.md). Local image execution and the real
+HTTPS proxy trust policy require verification before public rollout.
+
 **Book your time. No clashes, no confusion.**
 
 SlotSure helps an independent consultant and their customers replace scheduling

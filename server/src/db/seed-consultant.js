@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { createPool } from './pool.js';
+import argon2 from 'argon2';
 
 export async function seedConsultant(pool, { name, email, passwordHash }) {
   if (
@@ -16,6 +17,31 @@ export async function seedConsultant(pool, { name, email, passwordHash }) {
     throw new Error(
       'Provide a name, email, and encoded Argon2id password hash.',
     );
+  }
+  // Validate with the real parser/verifier before storing an administrative hash.
+  // Bound parameters first so a typo cannot allocate unbounded memory at startup.
+  const parameters = Object.fromEntries(
+    passwordHash
+      .split('$')[3]
+      .split(',')
+      .map((part) => part.split('=')),
+  );
+  if (
+    +parameters.m < 8 * +parameters.p ||
+    +parameters.m > 262144 ||
+    +parameters.t < 1 ||
+    +parameters.t > 10 ||
+    +parameters.p < 1 ||
+    +parameters.p > 16
+  ) {
+    throw new Error(
+      'Argon2id parameters are invalid or exceed supported seed limits.',
+    );
+  }
+  try {
+    await argon2.verify(passwordHash, 'seed-format-validation-probe');
+  } catch {
+    throw new Error('Provide a valid encoded Argon2id password hash.');
   }
   const result = await pool.query(
     `INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, 'consultant')

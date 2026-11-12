@@ -5,6 +5,28 @@ export function readConfig(env = process.env) {
   }
   const timeZone = env.CONSULTANT_TIME_ZONE ?? 'Asia/Karachi';
   new Intl.DateTimeFormat('en', { timeZone });
+  if (env.HOST !== undefined && (!env.HOST.trim() || /[\s/]/.test(env.HOST))) {
+    throw new Error('HOST must be a nonempty listener hostname or IP address');
+  }
+  if (env.NODE_ENV === 'production') {
+    let database;
+    try {
+      database = new URL(env.DATABASE_URL);
+    } catch {
+      throw new Error('DATABASE_URL must be a PostgreSQL URL in production');
+    }
+    if (
+      !['postgres:', 'postgresql:'].includes(database.protocol) ||
+      !database.hostname ||
+      database.pathname.length < 2 ||
+      /(?:_test|_benchmark)$/.test(database.pathname) ||
+      env.TEST_DATABASE_URL
+    ) {
+      throw new Error(
+        'Production requires a PostgreSQL application database and no TEST_DATABASE_URL',
+      );
+    }
+  }
   return {
     port,
     host: env.HOST ?? '127.0.0.1',
